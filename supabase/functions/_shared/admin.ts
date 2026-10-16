@@ -83,6 +83,17 @@ export function validarGalpoes(valor: unknown): string[] {
   return lista
 }
 
+/** Telefone só com dígitos: DDD + número (10 ou 11), opcionalmente com 55 na frente. */
+export function validarTelefone(valor: unknown, obrigatorio: boolean): string | null {
+  const digitos = String(valor ?? '').replace(/\D/g, '')
+  if (!digitos) {
+    if (obrigatorio) throw new ErroHttp(400, 'Informe o telefone com DDD.')
+    return null
+  }
+  if (digitos.length < 10 || digitos.length > 13) throw new ErroHttp(400, 'Telefone inválido. Use DDD + número.')
+  return digitos
+}
+
 export function tratarErro(erro: unknown): Response {
   if (erro instanceof ErroHttp) return json({ erro: erro.message }, erro.status)
   console.error(erro)

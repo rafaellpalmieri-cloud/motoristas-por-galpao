@@ -34,6 +34,7 @@ export interface Perfil {
   user_id: string
   nome: string
   email: string
+  telefone: string | null
   ativo: boolean
   trocar_senha: boolean
   alertas_vistos_em: string

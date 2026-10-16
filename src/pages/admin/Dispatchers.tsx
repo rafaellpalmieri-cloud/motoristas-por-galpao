@@ -6,6 +6,7 @@ import { Botao, Campo, Carregando, EstadoErro, EstadoVazio, Modal, Pagina } from
 import { GALPOES } from '../../lib/constantes'
 import { mensagemErro, mensagemErroFuncao } from '../../lib/erros'
 import { supabase } from '../../lib/supabase'
+import { formatarCelular, linkTelefone, linkWhatsApp } from '../../lib/telefone'
 import type { Papel, Perfil } from '../../lib/tipos'
 
 interface Usuario extends Perfil {
@@ -18,7 +19,7 @@ function useUsuarios() {
     queryKey: ['admin', 'usuarios'],
     queryFn: async (): Promise<Usuario[]> => {
       const [perfis, papeis, galpoes] = await Promise.all([
-        supabase.from('perfis').select('user_id, nome, email, ativo, trocar_senha, alertas_vistos_em').order('nome'),
+        supabase.from('perfis').select('user_id, nome, email, telefone, ativo, trocar_senha, alertas_vistos_em').order('nome'),
         supabase.from('user_roles').select('user_id, role'),
         supabase.from('dispatcher_galpoes').select('user_id, galpao'),
       ])
@@ -35,6 +36,34 @@ function useUsuarios() {
       }))
     },
   })
+}
+
+/** Telefone do usuário com atalhos para ligar e chamar no WhatsApp. */
+function Contato({ telefone, nome }: { telefone: string | null; nome: string }) {
+  const tel = linkTelefone(telefone)
+  const wa = linkWhatsApp(telefone)
+  if (!tel) return <p className="mt-2 text-sm text-slate-400">Sem telefone cadastrado</p>
+  return (
+    <div className="mt-2 flex flex-wrap items-center gap-2">
+      <a
+        href={tel}
+        aria-label={`Ligar para ${nome}`}
+        className="inline-flex min-h-11 items-center gap-1 rounded-xl border border-slate-300 px-3 text-sm text-slate-800 hover:bg-slate-50"
+      >
+        📞 {formatarCelular(telefone)}
+      </a>
+      {wa && (
+        <a
+          href={wa}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex min-h-11 items-center rounded-xl border border-emerald-300 bg-emerald-50 px-3 text-sm font-semibold text-emerald-800 hover:bg-emerald-100"
+        >
+          WhatsApp
+        </a>
+      )}
+    </div>
+  )
 }
 
 async function chamarFuncao<T>(nome: string, corpo: Record<string, unknown>): Promise<T> {
@@ -95,15 +124,57 @@ function SenhaTemporaria({ email, senha, aoFechar }: { email: string; senha: str
   )
 }
 
+function SeletorPapel({ valor, aoMudar }: { valor: Papel; aoMudar: (p: Papel) => void }) {
+  return (
+    <fieldset>
+      <legend className="mb-2 text-sm font-medium text-slate-700">Tipo de acesso *</legend>
+      <div className="grid grid-cols-2 gap-2">
+        {(
+          [
+            ['dispatcher', 'Dispatcher', 'Só os galpões marcados'],
+            ['admin', 'Admin', 'Tudo, inclusive equipe e CSV'],
+          ] as const
+        ).map(([p, rotulo, dica]) => (
+          <label
+            key={p}
+            className={`flex min-h-14 cursor-pointer flex-col items-center justify-center rounded-xl border px-2 text-center ${valor === p ? 'border-sky-600 bg-sky-50 text-sky-900' : 'border-slate-300 text-slate-700'}`}
+          >
+            <input type="radio" name="papel" className="sr-only" checked={valor === p} onChange={() => aoMudar(p)} />
+            <span className="font-semibold">{rotulo}</span>
+            <span className="text-xs text-slate-500">{dica}</span>
+          </label>
+        ))}
+      </div>
+    </fieldset>
+  )
+}
+
+function soDigitos(valor: string) {
+  return valor.replace(/\D/g, '')
+}
+
+function telefoneValido(valor: string) {
+  const d = soDigitos(valor)
+  return d.length >= 10 && d.length <= 13
+}
+
 function FormNovo({ aoCriar }: { aoCriar: (email: string, senha: string) => void }) {
+  const [papel, setPapel] = useState<Papel>('dispatcher')
   const [nome, setNome] = useState('')
   const [email, setEmail] = useState('')
+  const [telefone, setTelefone] = useState('')
   const [galpoes, setGalpoes] = useState<string[]>([])
   const [erro, setErro] = useState<string | null>(null)
   const queryClient = useQueryClient()
   const criar = useMutation({
     mutationFn: () =>
-      chamarFuncao<{ senha_temporaria: string; email: string }>('admin-criar-usuario', { nome, email, galpoes }),
+      chamarFuncao<{ senha_temporaria: string; email: string }>('admin-criar-usuario', {
+        papel,
+        nome,
+        email,
+        telefone: soDigitos(telefone),
+        galpoes: papel === 'dispatcher' ? galpoes : [],
+      }),
     onSuccess: (r) => {
       queryClient.invalidateQueries({ queryKey: ['admin', 'usuarios'] })
       aoCriar(r.email, r.senha_temporaria)
@@ -113,13 +184,16 @@ function FormNovo({ aoCriar }: { aoCriar: (email: string, senha: string) => void
 
   function enviar(e: FormEvent) {
     e.preventDefault()
-    if (!galpoes.length) return setErro('Selecione ao menos um galpão.')
+    if (papel === 'dispatcher' && !telefone.trim()) return setErro('Informe o telefone com DDD.')
+    if (telefone.trim() && !telefoneValido(telefone)) return setErro('Telefone inválido. Use DDD + número.')
+    if (papel === 'dispatcher' && !galpoes.length) return setErro('Selecione ao menos um galpão.')
     setErro(null)
     criar.mutate()
   }
 
   return (
     <form onSubmit={enviar} className="flex flex-col gap-4">
+      <SeletorPapel valor={papel} aoMudar={setPapel} />
       <Campo rotulo="Nome *" required value={nome} onChange={(e) => setNome(e.target.value)} autoComplete="off" />
       <Campo
         rotulo="E-mail *"
@@ -130,22 +204,45 @@ function FormNovo({ aoCriar }: { aoCriar: (email: string, senha: string) => void
         onChange={(e) => setEmail(e.target.value)}
         autoComplete="off"
       />
-      <SeletorGalpoes valor={galpoes} aoMudar={setGalpoes} />
+      <Campo
+        rotulo={papel === 'dispatcher' ? 'Telefone (WhatsApp) *' : 'Telefone (WhatsApp)'}
+        type="tel"
+        inputMode="tel"
+        placeholder="(21) 99999-9999"
+        value={telefone}
+        onChange={(e) => setTelefone(e.target.value)}
+        autoComplete="off"
+      />
+      {papel === 'dispatcher' ? (
+        <SeletorGalpoes valor={galpoes} aoMudar={setGalpoes} />
+      ) : (
+        <p className="rounded-xl bg-sky-50 p-3 text-sm text-sky-900">
+          Admin vê todos os galpões e pode gerenciar a equipe, importar e exportar CSV.
+        </p>
+      )}
       {erro && <p className="text-sm text-rose-700">{erro}</p>}
       <Botao type="submit" carregando={criar.isPending}>
-        Criar dispatcher
+        {papel === 'admin' ? 'Criar admin' : 'Criar dispatcher'}
       </Botao>
     </form>
   )
 }
 
-function FormGalpoes({ usuario, aoFechar }: { usuario: Usuario; aoFechar: () => void }) {
+function FormEditar({ usuario, aoFechar }: { usuario: Usuario; aoFechar: () => void }) {
+  const ehDispatcher = !usuario.papeis.includes('admin')
+  const [telefone, setTelefone] = useState(usuario.telefone ?? '')
   const [galpoes, setGalpoes] = useState(usuario.galpoes)
   const [erro, setErro] = useState<string | null>(null)
   const queryClient = useQueryClient()
   const toast = useToast()
   const salvar = useMutation({
     mutationFn: async () => {
+      const novoTelefone = soDigitos(telefone) || null
+      if (novoTelefone !== (usuario.telefone ?? null)) {
+        const { error } = await supabase.from('perfis').update({ telefone: novoTelefone }).eq('user_id', usuario.user_id)
+        if (error) throw error
+      }
+      if (!ehDispatcher) return
       const remover = usuario.galpoes.filter((g) => !galpoes.includes(g))
       const adicionar = galpoes.filter((g) => !usuario.galpoes.includes(g))
       if (adicionar.length) {
@@ -164,25 +261,38 @@ function FormGalpoes({ usuario, aoFechar }: { usuario: Usuario; aoFechar: () => 
       }
     },
     onSuccess: () => {
-      toast('Galpões atualizados.', 'sucesso')
+      toast('Dados atualizados.', 'sucesso')
       aoFechar()
     },
     onError: (e) => setErro(mensagemErro(e)),
     onSettled: () => queryClient.invalidateQueries({ queryKey: ['admin', 'usuarios'] }),
   })
 
+  function confirmar() {
+    if (ehDispatcher && !telefone.trim()) return setErro('Informe o telefone com DDD.')
+    if (telefone.trim() && !telefoneValido(telefone)) return setErro('Telefone inválido. Use DDD + número.')
+    if (ehDispatcher && !galpoes.length) return setErro('Selecione ao menos um galpão.')
+    setErro(null)
+    salvar.mutate()
+  }
+
   return (
     <div className="flex flex-col gap-4">
-      <SeletorGalpoes valor={galpoes} aoMudar={setGalpoes} />
+      <Campo
+        rotulo={ehDispatcher ? 'Telefone (WhatsApp) *' : 'Telefone (WhatsApp)'}
+        type="tel"
+        inputMode="tel"
+        placeholder="(21) 99999-9999"
+        value={telefone}
+        onChange={(e) => setTelefone(e.target.value)}
+      />
+      {ehDispatcher && <SeletorGalpoes valor={galpoes} aoMudar={setGalpoes} />}
       {erro && <p className="text-sm text-rose-700">{erro}</p>}
       <div className="grid grid-cols-2 gap-3">
         <Botao variante="secundario" onClick={aoFechar}>
           Cancelar
         </Botao>
-        <Botao
-          carregando={salvar.isPending}
-          onClick={() => (galpoes.length ? salvar.mutate() : setErro('Selecione ao menos um galpão.'))}
-        >
+        <Botao carregando={salvar.isPending} onClick={confirmar}>
           Salvar
         </Botao>
       </div>
@@ -295,13 +405,13 @@ export default function Dispatchers() {
                     Galpões: <strong>{u.galpoes.length ? u.galpoes.join(', ') : 'nenhum'}</strong>
                   </p>
                 )}
-                {!souEu && (
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    {!ehAdmin && (
-                      <Botao variante="secundario" onClick={() => setEditando(u)}>
-                        Galpões
-                      </Botao>
-                    )}
+                <Contato telefone={u.telefone} nome={u.nome} />
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <Botao variante="secundario" onClick={() => setEditando(u)}>
+                    Editar
+                  </Botao>
+                  {!souEu && (
+                    <>
                     <Botao variante="secundario" onClick={() => setAcao({ tipo: 'redefinir_senha', usuario: u })}>
                       Nova senha
                     </Botao>
@@ -314,19 +424,20 @@ export default function Dispatchers() {
                         Reativar
                       </Botao>
                     )}
-                  </div>
-                )}
+                    </>
+                  )}
+                </div>
               </li>
             )
           })}
         </ul>
       )}
 
-      <Modal aberto={novoAberto} titulo="Novo dispatcher" aoFechar={() => setNovoAberto(false)}>
+      <Modal aberto={novoAberto} titulo="Novo usuário" aoFechar={() => setNovoAberto(false)}>
         <FormNovo aoCriar={mostrarSenha} />
       </Modal>
-      <Modal aberto={!!editando} titulo={`Galpões de ${editando?.nome ?? ''}`} aoFechar={() => setEditando(null)}>
-        {editando && <FormGalpoes key={editando.user_id} usuario={editando} aoFechar={() => setEditando(null)} />}
+      <Modal aberto={!!editando} titulo={`Editar ${editando?.nome ?? ''}`} aoFechar={() => setEditando(null)}>
+        {editando && <FormEditar key={editando.user_id} usuario={editando} aoFechar={() => setEditando(null)} />}
       </Modal>
       <Modal aberto={!!acao} titulo="Confirmar" aoFechar={() => setAcao(null)}>
         {acao && <ConfirmarAcao acao={acao} aoFechar={() => setAcao(null)} aoSenha={mostrarSenha} />}

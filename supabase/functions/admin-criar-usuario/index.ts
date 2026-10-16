@@ -1,6 +1,7 @@
-// Cria um dispatcher: usuário no Auth (e-mail já confirmado), perfil,
-// papel "dispatcher" e galpões. Devolve a senha temporária UMA vez.
-// Corpo: { "nome": "...", "email": "...", "galpoes": ["SRJ1", ...] }
+// Cria um usuário do app: Auth (e-mail já confirmado), perfil com telefone,
+// papel ("dispatcher" ou "admin") e, para dispatcher, galpões.
+// Devolve a senha temporária UMA vez.
+// Corpo: { "nome", "email", "telefone", "papel": "dispatcher" | "admin", "galpoes": ["SRJ1", ...] }
 import {
   corsHeaders,
   ErroHttp,
@@ -9,6 +10,7 @@ import {
   json,
   tratarErro,
   validarGalpoes,
+  validarTelefone,
 } from '../_shared/admin.ts'
 
 Deno.serve(async (req) => {
@@ -23,7 +25,11 @@ Deno.serve(async (req) => {
     })
     const nome = String(corpo?.nome ?? '').trim()
     const email = String(corpo?.email ?? '').trim().toLowerCase()
-    const galpoes = validarGalpoes(corpo?.galpoes)
+    const papel = corpo?.papel === 'admin' ? 'admin' : corpo?.papel === 'dispatcher' || corpo?.papel === undefined ? 'dispatcher' : null
+    if (!papel) throw new ErroHttp(400, 'Tipo de usuário inválido.')
+    // Admin vê todos os galpões; galpões só valem para dispatcher.
+    const galpoes = papel === 'dispatcher' ? validarGalpoes(corpo?.galpoes) : []
+    const telefone = validarTelefone(corpo?.telefone, papel === 'dispatcher')
 
     if (nome.length < 2 || nome.length > 120) throw new ErroHttp(400, 'Informe o nome.')
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new ErroHttp(400, 'E-mail inválido.')
@@ -45,14 +51,16 @@ Deno.serve(async (req) => {
     try {
       const { error: e1 } = await admin
         .from('perfis')
-        .insert({ user_id: userId, nome, email, ativo: true, trocar_senha: true })
+        .insert({ user_id: userId, nome, email, telefone, ativo: true, trocar_senha: true })
       if (e1) throw e1
-      const { error: e2 } = await admin.from('user_roles').insert({ user_id: userId, role: 'dispatcher' })
+      const { error: e2 } = await admin.from('user_roles').insert({ user_id: userId, role: papel })
       if (e2) throw e2
-      const { error: e3 } = await admin
-        .from('dispatcher_galpoes')
-        .insert(galpoes.map((galpao) => ({ user_id: userId, galpao })))
-      if (e3) throw e3
+      if (galpoes.length) {
+        const { error: e3 } = await admin
+          .from('dispatcher_galpoes')
+          .insert(galpoes.map((galpao) => ({ user_id: userId, galpao })))
+        if (e3) throw e3
+      }
     } catch (erro) {
       // Desfaz o usuário no Auth para não deixar conta pela metade
       // (perfil, papel e galpões caem junto pelo ON DELETE CASCADE).
@@ -60,7 +68,7 @@ Deno.serve(async (req) => {
       throw erro
     }
 
-    return json({ user_id: userId, email, senha_temporaria: senha }, 201)
+    return json({ user_id: userId, email, papel, senha_temporaria: senha }, 201)
   } catch (erro) {
     return tratarErro(erro)
   }

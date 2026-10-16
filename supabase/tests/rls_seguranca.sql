@@ -496,6 +496,50 @@ $$;
 
 reset role;
 
+-- =====================================================================
+-- 8. Telefone dos usuários e novo admin
+-- =====================================================================
+select set_config('request.jwt.claims', '{"sub":"00000000-0000-4000-a000-000000000001","role":"authenticated"}', true);
+set local role authenticated;
+
+do $$
+declare n integer;
+begin
+  update public.perfis set telefone = '21988887777' where user_id = '00000000-0000-4000-a000-000000000002';
+  get diagnostics n = row_count;
+  if n <> 1 then raise exception 'FALHOU: admin não conseguiu salvar telefone do dispatcher'; end if;
+  raise notice 'OK: admin salva telefone do dispatcher';
+
+  begin
+    update public.perfis set telefone = '123' where user_id = '00000000-0000-4000-a000-000000000002';
+    raise exception 'FALHOU: aceitou telefone inválido';
+  exception when check_violation then raise notice 'OK: telefone inválido é recusado';
+  end;
+
+  -- Admin promove outro usuário a admin (mesmo caminho da Edge Function).
+  insert into public.user_roles (user_id, role) values ('00000000-0000-4000-a000-000000000003', 'admin');
+  raise notice 'OK: admin pode criar outro admin';
+end;
+$$;
+
+reset role;
+select set_config('request.jwt.claims', '{"sub":"00000000-0000-4000-a000-000000000002","role":"authenticated"}', true);
+set local role authenticated;
+
+do $$
+declare n integer;
+begin
+  update public.perfis set telefone = '21900000000' where user_id = '00000000-0000-4000-a000-000000000002';
+  get diagnostics n = row_count;
+  if n <> 0 then raise exception 'FALHOU: dispatcher alterou o próprio telefone direto'; end if;
+  select count(*) into n from public.perfis where telefone is not null and user_id <> '00000000-0000-4000-a000-000000000002';
+  if n <> 0 then raise exception 'FALHOU: dispatcher leu telefone de outro usuário'; end if;
+  raise notice 'OK: dispatcher não altera telefone nem lê telefone de outros';
+end;
+$$;
+
+reset role;
+
 do $$ begin raise notice '=== TODOS OS TESTES PASSARAM ==='; end $$;
 
 rollback;

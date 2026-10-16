@@ -29,7 +29,7 @@ async function buscarDadosUsuario(userId: string): Promise<DadosUsuario> {
   const [perfil, papeis, galpoes] = await Promise.all([
     supabase
       .from('perfis')
-      .select('user_id, nome, email, ativo, trocar_senha, alertas_vistos_em')
+      .select('user_id, nome, email, telefone, ativo, trocar_senha, alertas_vistos_em')
       .eq('user_id', userId)
       .maybeSingle(),
     supabase.from('user_roles').select('role').eq('user_id', userId),
