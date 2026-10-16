@@ -1,5 +1,7 @@
-// Recebe do Apps Script da planilha interna as linhas da aba INATIVOS
-// e inativa no app quem ainda está ativo (gera alerta no sino).
+// Recebe do Apps Script da planilha interna:
+//  - acao "inativos" (padrão): linhas da aba INATIVOS → inativa quem ainda está ativo (gera alerta);
+//  - acao "ativos": linhas da aba ATIVOS → cadastra novos e atualiza dados (nunca muda status);
+//  - acao "buscar_codigos": { linha, placa, celular } → devolve o código do app (preenchimento único).
 //
 // Autenticação: cabeçalho "x-sync-token" igual ao secret PLANILHA_SYNC_TOKEN.
 // (Apps Script não tem JWT do Supabase, por isso verify_jwt = false.)
@@ -8,7 +10,13 @@
 // (CPF, RG, endereço...) é descartado aqui, mesmo que venha por engano.
 import { createClient } from 'npm:@supabase/supabase-js@2'
 
-const CAMPOS = ['linha', 'nome_completo', 'celular', 'placa', 'galpao', 'modal', 'data', 'motivo'] as const
+const CAMPOS = ['linha', 'codigo', 'nome_completo', 'celular', 'placa', 'galpao', 'modal', 'data', 'motivo'] as const
+
+const FUNCOES = {
+  inativos: 'sincronizar_inativos_planilha',
+  ativos: 'sincronizar_ativos_planilha',
+  buscar_codigos: 'buscar_codigos_planilha',
+} as const
 
 function json(corpo: unknown, status = 200): Response {
   return new Response(JSON.stringify(corpo), {
@@ -35,12 +43,14 @@ Deno.serve(async (req) => {
   if (esperado.length < 32) return json({ erro: 'Função mal configurada.' }, 500)
   if (!tokensIguais(recebido, esperado)) return json({ erro: 'Não autorizado.' }, 401)
 
-  let corpo: { linhas?: unknown }
+  let corpo: { linhas?: unknown; acao?: unknown }
   try {
     corpo = await req.json()
   } catch {
     return json({ erro: 'JSON inválido.' }, 400)
   }
+  const acao = (corpo.acao ?? 'inativos') as keyof typeof FUNCOES
+  if (!(acao in FUNCOES)) return json({ erro: 'Ação inválida.' }, 400)
   if (!Array.isArray(corpo.linhas)) return json({ erro: 'Esperado { "linhas": [...] }.' }, 400)
   if (corpo.linhas.length > 1000) return json({ erro: 'Máximo de 1000 linhas por envio.' }, 400)
 
@@ -59,7 +69,7 @@ Deno.serve(async (req) => {
   if (!url || !serviceKey) return json({ erro: 'Função mal configurada.' }, 500)
   const admin = createClient(url, serviceKey, { auth: { persistSession: false, autoRefreshToken: false } })
 
-  const { data, error } = await admin.rpc('sincronizar_inativos_planilha', { p_linhas: linhas })
+  const { data, error } = await admin.rpc(FUNCOES[acao], { p_linhas: linhas })
   if (error) {
     console.error(error)
     return json({ erro: 'Falha ao sincronizar.' }, 500)

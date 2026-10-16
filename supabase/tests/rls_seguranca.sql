@@ -540,6 +540,101 @@ $$;
 
 reset role;
 
+-- =====================================================================
+-- 9. Aba ATIVOS da planilha e preenchimento de códigos
+-- =====================================================================
+select set_config('request.jwt.claims', '{"sub":"00000000-0000-4000-a000-000000000001","role":"authenticated"}', true);
+set local role authenticated;
+
+do $$
+begin
+  begin
+    perform public.sincronizar_ativos_planilha('[]'::jsonb);
+    raise exception 'FALHOU: usuário logado chamou sincronizar_ativos_planilha';
+  exception when insufficient_privilege then raise notice 'OK: sincronização da aba ATIVOS não pode ser chamada pelo app';
+  end;
+  begin
+    perform public.buscar_codigos_planilha('[]'::jsonb);
+    raise exception 'FALHOU: usuário logado chamou buscar_codigos_planilha';
+  exception when insufficient_privilege then raise notice 'OK: busca de códigos não pode ser chamada pelo app';
+  end;
+  begin
+    perform public.importar_motoristas_nucleo('[]'::jsonb, null);
+    raise exception 'FALHOU: usuário logado chamou o núcleo da importação';
+  exception when insufficient_privilege then raise notice 'OK: núcleo da importação é interno';
+  end;
+end;
+$$;
+
+reset role;
+select set_config('request.jwt.claims', '{"role":"service_role"}', true);
+set local role service_role;
+
+do $$
+declare r jsonb;
+begin
+  -- TESTE-NULO está inativo (seção 7): a aba ATIVOS atualiza dados mas não reativa.
+  r := public.sincronizar_ativos_planilha('[
+    {"linha":2,"codigo":"TESTE-NULO","nome_completo":"Nome Pela Planilha","celular":"21900000103","placa":"TST0003","galpao":" srj 4 ","modal":"Van"},
+    {"linha":3,"codigo":"TESTE-PLAN","nome_completo":"Novo Pela Planilha","celular":"21900000555","placa":"TST0555","galpao":"HUB","modal":"Moto"},
+    {"linha":4,"codigo":"","nome_completo":"Sem Codigo","placa":"TST0666"},
+    {"linha":5,"codigo":"TESTE-RUIM","galpao":"XYZ"}
+  ]'::jsonb);
+  if (r ->> 'novos')::int <> 1 or (r ->> 'atualizados')::int <> 1 or jsonb_array_length(r -> 'erros') <> 2 then
+    raise exception 'FALHOU: resultado inesperado da aba ATIVOS: %', r;
+  end if;
+  raise notice 'OK: aba ATIVOS cadastra novos, atualiza existentes e aponta erros';
+
+  if not exists (select 1 from public.motoristas where codigo = 'TESTE-NULO' and status = 'inativo'
+                 and nome_completo = 'Nome Pela Planilha' and galpao = 'SRJ4') then
+    raise exception 'FALHOU: aba ATIVOS reativou motorista ou não atualizou os dados';
+  end if;
+  raise notice 'OK: aba ATIVOS não muda o status de quem já existe';
+
+  if not exists (select 1 from public.motoristas where codigo = 'TESTE-PLAN' and status = 'ativo' and galpao = 'HUB') then
+    raise exception 'FALHOU: motorista novo da planilha não entrou como ativo';
+  end if;
+  raise notice 'OK: motorista novo da aba ATIVOS entra como ativo';
+
+  -- Preencher códigos: por placa, por celular, não encontrado.
+  r := public.buscar_codigos_planilha('[
+    {"linha":2,"placa":"tst-0555","celular":""},
+    {"linha":3,"placa":"","celular":"(21) 90000-0103"},
+    {"linha":4,"placa":"ZZZ9Z99","celular":""}
+  ]'::jsonb);
+  if r -> 0 ->> 'codigo' is distinct from 'TESTE-PLAN'
+     or r -> 1 ->> 'codigo' is distinct from 'TESTE-NULO'
+     or r -> 2 ->> 'situacao' is distinct from 'nao_encontrado' then
+    raise exception 'FALHOU: busca de códigos inesperada: %', r;
+  end if;
+  raise notice 'OK: busca de códigos acha por placa e por celular';
+
+  -- Aba INATIVOS com código: usa o código.
+  r := public.sincronizar_inativos_planilha('[{"linha":9,"codigo":"TESTE-PLAN","data":"","motivo":"Documentação"}]'::jsonb);
+  if (r ->> 'inativados')::int <> 1 or not exists (
+       select 1 from public.motoristas where codigo = 'TESTE-PLAN' and status = 'inativo' and motivo_inativacao = 'Documentação') then
+    raise exception 'FALHOU: inativação pela planilha usando código: %', r;
+  end if;
+  raise notice 'OK: aba INATIVOS localiza o motorista pelo código';
+end;
+$$;
+
+reset role;
+
+-- O CSV pelo app continua só para admin e com o mesmo comportamento.
+select set_config('request.jwt.claims', '{"sub":"00000000-0000-4000-a000-000000000002","role":"authenticated"}', true);
+set local role authenticated;
+do $$
+begin
+  begin
+    perform public.importar_motoristas('[{"codigo":"X","status":"ativo"}]'::jsonb);
+    raise exception 'FALHOU: dispatcher importou depois da refatoração';
+  exception when insufficient_privilege then raise notice 'OK: importação por CSV continua só para admin';
+  end;
+end;
+$$;
+reset role;
+
 do $$ begin raise notice '=== TODOS OS TESTES PASSARAM ==='; end $$;
 
 rollback;
