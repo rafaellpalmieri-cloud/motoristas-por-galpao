@@ -15,6 +15,8 @@ alter default privileges in schema public revoke all on sequences from anon;
 alter default privileges in schema public revoke all on functions from anon, public;
 
 -- authenticated: só o necessário; a RLS decide as linhas.
+-- Grants explícitos: funciona mesmo com "Automatically expose new tables" desligado.
+grant usage on schema public to authenticated;
 revoke all on all tables in schema public from authenticated;
 grant select, insert, update, delete on public.perfis             to authenticated;
 grant select, insert, update, delete on public.user_roles         to authenticated;

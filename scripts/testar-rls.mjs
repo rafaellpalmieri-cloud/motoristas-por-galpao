@@ -25,8 +25,12 @@ const ambienteSupabase = `
   $$;
   grant usage on schema auth to anon, authenticated, service_role;
   grant execute on function auth.uid() to anon, authenticated, service_role;
+`
+
+// Privilégios padrão que o Supabase concede em public quando "Automatically expose
+// new tables" está ligado. Com SEM_EXPOSICAO=1, simula essa opção desligada.
+const exposicaoAutomatica = `
   grant usage on schema public to anon, authenticated, service_role;
-  -- Privilégios padrão que o Supabase concede em public:
   alter default privileges in schema public grant all on tables    to anon, authenticated, service_role;
   alter default privileges in schema public grant all on functions to anon, authenticated, service_role;
   alter default privileges in schema public grant all on sequences to anon, authenticated, service_role;
@@ -36,6 +40,8 @@ const db = new PGlite()
 let falhou = false
 try {
   await db.exec(ambienteSupabase)
+  if (process.env.SEM_EXPOSICAO !== '1') await db.exec(exposicaoAutomatica)
+  else console.log('Simulando "Automatically expose new tables" DESLIGADO\n')
   for (const arquivo of readdirSync(pastaMigracoes).filter((f) => f.endsWith('.sql')).sort()) {
     console.log(`Migração: ${arquivo}`)
     await db.exec(readFileSync(join(pastaMigracoes, arquivo), 'utf8'))
