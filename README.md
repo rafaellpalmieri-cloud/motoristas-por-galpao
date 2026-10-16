@@ -8,6 +8,8 @@ App web (pensado para celular) para os dispatchers dos galpões **SRJ1, SRJ2, SR
 
 - **Integração com a planilha interna (Google Sheets):** a cada 15 minutos, motoristas novos da aba ATIVOS são cadastrados (pelo código) e os movidos para a aba INATIVOS são inativados no app, gerando alerta com o selo **Planilha**. CPF e outros dados sensíveis nunca saem da planilha. Configuração em [`docs/PLANILHA_SHEETS.md`](docs/PLANILHA_SHEETS.md).
 
+- **Avisos de movimentação:** cada inativação ou reativação manda WhatsApp (Z-API) para os dispatchers do galpão. As feitas no app também viram uma linha na aba **MOVIMENTAÇÕES APP** da planilha. Configuração em [`docs/AVISOS_WHATSAPP.md`](docs/AVISOS_WHATSAPP.md).
+
 Stack: Vite + React + TypeScript, Tailwind CSS, React Router, TanStack Query, supabase-js, Papa Parse. Backend: Supabase (Postgres + RLS, Auth, Edge Functions).
 
 > ⚠️ Este app usa um **projeto Supabase novo e exclusivo**. Nunca aponte para o Supabase de produção da empresa.

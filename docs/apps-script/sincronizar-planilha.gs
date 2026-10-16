@@ -9,6 +9,8 @@
  *                          com o código que o motorista já tem no app (busca por placa/celular).
  *  - sincronizarTudo    → envia ATIVOS (novos e dados atualizados) e depois INATIVOS (inativações).
  *  - instalarGatilho    → UMA vez: agenda sincronizarTudo a cada 15 minutos.
+ *  - doPost             → recebe do app as movimentações (aba "MOVIMENTAÇÕES APP");
+ *                          só funciona depois de Implantar → App da Web.
  *
  * Segurança:
  *  - Só as colunas da lista COLUNAS saem da planilha. CPF, RG e endereço
@@ -201,6 +203,52 @@ function preencherCodigos() {
     console.log(nomeAba + ': ' + JSON.stringify(resumo) +
       (pendentes.length ? '\n  Preencha à mão as linhas: ' + pendentes.join(', ') : ''));
   });
+}
+
+// ---------------------------------------------------------------------
+// App → planilha: cada inativação/reativação feita NO APP vira uma linha
+// na aba "MOVIMENTAÇÕES APP". Exige implantar este script como App da Web
+// (Implantar → Nova implantação → App da Web). Ver docs/PLANILHA_SHEETS.md.
+// ---------------------------------------------------------------------
+const ABA_MOVIMENTACOES = 'MOVIMENTAÇÕES APP';
+const CABECALHO_MOVIMENTACOES = ['Data', 'Código', 'Nome', 'Placa', 'Galpão', 'De', 'Para', 'Motivo', 'Observação', 'Por'];
+
+/** Evita que um texto vindo do app seja interpretado como fórmula. */
+function textoSeguro_(v) {
+  const s = String(v === null || v === undefined ? '' : v).slice(0, 500);
+  return /^[=+\-@]/.test(s) ? "'" + s : s;
+}
+
+function resposta_(obj) {
+  return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON);
+}
+
+function doPost(e) {
+  try {
+    const dados = JSON.parse((e && e.postData && e.postData.contents) || '{}');
+    const esperado = PropertiesService.getScriptProperties().getProperty('PLANILHA_SYNC_TOKEN');
+    if (!esperado || dados.token !== esperado) return resposta_({ ok: false, erro: 'não autorizado' });
+
+    const m = dados.movimento || {};
+    const planilha = SpreadsheetApp.getActiveSpreadsheet();
+    const trava = LockService.getScriptLock();
+    trava.waitLock(10000);
+    try {
+      let aba = planilha.getSheetByName(ABA_MOVIMENTACOES);
+      if (!aba) {
+        aba = planilha.insertSheet(ABA_MOVIMENTACOES);
+        aba.appendRow(CABECALHO_MOVIMENTACOES);
+        aba.setFrozenRows(1);
+        aba.getRange(1, 1, 1, CABECALHO_MOVIMENTACOES.length).setFontWeight('bold');
+      }
+      aba.appendRow([m.data, m.codigo, m.nome, m.placa, m.galpao, m.de, m.para, m.motivo, m.observacao, m.por].map(textoSeguro_));
+    } finally {
+      trava.releaseLock();
+    }
+    return resposta_({ ok: true });
+  } catch (err) {
+    return resposta_({ ok: false, erro: String(err) });
+  }
 }
 
 /** Rode UMA vez para agendar a sincronização automática. */

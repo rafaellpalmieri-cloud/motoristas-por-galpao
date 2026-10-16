@@ -426,3 +426,7 @@ verify_jwt = false
 # Chamada pelo Apps Script da planilha (sem JWT); autentica por x-sync-token.
 [functions.sincronizar-planilha]
 verify_jwt = false
+
+# Chamada pelo gatilho do banco (pg_net); autentica por x-webhook-token.
+[functions.notificar-movimentacao]
+verify_jwt = false

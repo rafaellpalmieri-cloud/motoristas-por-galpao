@@ -635,6 +635,65 @@ end;
 $$;
 reset role;
 
+-- =====================================================================
+-- 10. Aviso de movimentação (WhatsApp/planilha) via gatilho
+-- Só roda no PGlite (npm run test:rls), onde pg_net é imitado; no projeto
+-- real o SQL Editor pula esta parte para não disparar avisos de verdade.
+-- =====================================================================
+do $$
+declare
+  n_antes integer;
+  n_depois integer;
+begin
+  if to_regclass('net._chamadas_teste') is null then
+    raise notice 'OK: (pulado fora do PGlite) aviso de movimentação';
+    return;
+  end if;
+
+  -- Sem segredos no Vault: nenhum aviso é disparado.
+  select count(*) into n_antes from net._chamadas_teste;
+  insert into public.motorista_historico (motorista_id, galpao, status_anterior, status_novo, motivo)
+  values ('10000000-0000-4000-a000-000000000001', 'SRJ1', 'ativo', 'inativo', 'Outro');
+  select count(*) into n_depois from net._chamadas_teste;
+  if n_depois <> n_antes then raise exception 'FALHOU: aviso disparado sem segredos configurados'; end if;
+  raise notice 'OK: sem segredos no Vault, nenhum aviso é disparado';
+
+  insert into vault.decrypted_secrets values ('notificar_url', 'https://exemplo.test/aviso'), ('notificar_token', 'token-de-teste');
+
+  -- Movimentação recente: dispara com o id do histórico e o token no cabeçalho.
+  insert into public.motorista_historico (motorista_id, galpao, status_anterior, status_novo, motivo)
+  values ('10000000-0000-4000-a000-000000000001', 'SRJ1', 'inativo', 'ativo', null);
+  if not exists (select 1 from net._chamadas_teste
+                 where url = 'https://exemplo.test/aviso' and headers ->> 'x-webhook-token' = 'token-de-teste'
+                   and (body ->> 'historico_id')::bigint = (select max(id) from public.motorista_historico)) then
+    raise exception 'FALHOU: movimentação recente não disparou aviso';
+  end if;
+  raise notice 'OK: movimentação recente dispara aviso com id e token';
+
+  -- Inativação antiga (vinda da planilha com data passada): não avisa.
+  select count(*) into n_antes from net._chamadas_teste;
+  insert into public.motorista_historico (motorista_id, galpao, status_anterior, status_novo, motivo, alterado_em, origem)
+  values ('10000000-0000-4000-a000-000000000001', 'SRJ1', 'ativo', 'inativo', 'Outro', now() - interval '3 days', 'planilha');
+  select count(*) into n_depois from net._chamadas_teste;
+  if n_depois <> n_antes then raise exception 'FALHOU: inativação antiga disparou aviso'; end if;
+  raise notice 'OK: inativação antiga da planilha não dispara aviso';
+
+  delete from vault.decrypted_secrets;
+end;
+$$;
+
+do $$
+begin
+  set local role authenticated;
+  begin
+    perform 1 from public.movimentacoes_notificadas limit 1;
+    raise exception 'FALHOU: usuário logado leu movimentacoes_notificadas';
+  exception when insufficient_privilege then raise notice 'OK: controle de avisos é inacessível ao app';
+  end;
+  reset role;
+end;
+$$;
+
 do $$ begin raise notice '=== TODOS OS TESTES PASSARAM ==='; end $$;
 
 rollback;

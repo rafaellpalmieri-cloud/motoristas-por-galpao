@@ -25,7 +25,24 @@ const ambienteSupabase = `
   $$;
   grant usage on schema auth to anon, authenticated, service_role;
   grant execute on function auth.uid() to anon, authenticated, service_role;
+
+  -- pg_net e Vault não existem no PGlite: imitações que só registram as chamadas.
+  create schema extensions;
+  create schema net;
+  create table net._chamadas_teste (id bigserial primary key, url text, body jsonb, headers jsonb);
+  create function net.http_post(url text, body jsonb default '{}', params jsonb default '{}',
+                                headers jsonb default '{}', timeout_milliseconds int default 5000)
+  returns bigint language sql as $$
+    insert into net._chamadas_teste (url, body, headers) values (url, body, headers) returning id
+  $$;
+  create schema vault;
+  create table vault.decrypted_secrets (name text primary key, decrypted_secret text);
 `
+
+// "create extension pg_net" não roda no PGlite; a imitação acima ocupa o lugar.
+function adaptarParaPglite(sql) {
+  return sql.replace(/create extension if not exists pg_net[^;]*;/gi, '-- (pg_net imitado no PGlite)')
+}
 
 // Privilégios padrão que o Supabase concede em public quando "Automatically expose
 // new tables" está ligado. Com SEM_EXPOSICAO=1, simula essa opção desligada.
@@ -46,7 +63,7 @@ async function executar(comExposicao) {
     if (comExposicao) await db.exec(exposicaoAutomatica)
     for (const arquivo of readdirSync(pastaMigracoes).filter((f) => f.endsWith('.sql')).sort()) {
       console.log(`Migração: ${arquivo}`)
-      await db.exec(readFileSync(join(pastaMigracoes, arquivo), 'utf8'))
+      await db.exec(adaptarParaPglite(readFileSync(join(pastaMigracoes, arquivo), 'utf8')))
     }
     console.log('\nTestes de segurança:')
     await db.exec(readFileSync(arquivoTeste, 'utf8'), {
