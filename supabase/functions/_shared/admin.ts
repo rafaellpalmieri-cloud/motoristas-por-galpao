@@ -5,16 +5,41 @@ import { createClient, type SupabaseClient } from 'npm:@supabase/supabase-js@2'
 
 export const GALPOES = ['SRJ1', 'SRJ2', 'SRJ4', 'SRJ5', 'SRJ8', 'SRJ9', 'SRJ10', 'SRJ13', 'SRJ17', 'HUB']
 
-// Defina APP_ORIGIN (supabase secrets set APP_ORIGIN=https://seu-app.vercel.app)
-// para aceitar chamadas só do seu domínio. Sem ele, aceita qualquer origem
-// (a segurança continua garantida pelo JWT + papel admin).
-const origem = Deno.env.get('APP_ORIGIN') ?? '*'
+// APP_ORIGIN: domínio(s) do app, separados por vírgula
+// (supabase secrets set APP_ORIGIN=https://seu-app.vercel.app).
+// localhost também é aceito, para desenvolvimento. Sem APP_ORIGIN, aceita
+// qualquer origem. A segurança de verdade é o JWT + papel admin conferidos aqui.
+const origensPermitidas = (Deno.env.get('APP_ORIGIN') ?? '')
+  .split(',')
+  .map((o) => o.trim())
+  .filter(Boolean)
+
+function origemPermitida(origem: string | null): string {
+  if (!origensPermitidas.length) return '*'
+  if (origem && (origensPermitidas.includes(origem) || /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origem))) {
+    return origem
+  }
+  return origensPermitidas[0]
+}
 
 export const corsHeaders = {
-  'Access-Control-Allow-Origin': origem,
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-region',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
   Vary: 'Origin',
+}
+
+/** Envolve o handler: responde o preflight e põe CORS (com a origem certa) em toda resposta. */
+export function comCors(handler: (req: Request) => Promise<Response>) {
+  return async (req: Request): Promise<Response> => {
+    const origem = origemPermitida(req.headers.get('Origin'))
+    if (req.method === 'OPTIONS') {
+      return new Response('ok', { headers: { ...corsHeaders, 'Access-Control-Allow-Origin': origem } })
+    }
+    const resposta = await handler(req)
+    resposta.headers.set('Access-Control-Allow-Origin', origem)
+    for (const [k, v] of Object.entries(corsHeaders)) resposta.headers.set(k, v)
+    return resposta
+  }
 }
 
 export function json(corpo: unknown, status = 200): Response {

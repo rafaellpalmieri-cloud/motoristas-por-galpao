@@ -3,13 +3,13 @@
 //  - redefinir_senha: gera nova senha temporária (devolvida UMA vez) e exige troca no próximo login.
 //  - desativar: perfil inativo + bloqueio de login no Auth.
 //  - reativar: desfaz o bloqueio.
-import { corsHeaders, ErroHttp, exigirAdmin, gerarSenhaTemporaria, json, tratarErro } from '../_shared/admin.ts'
+import { comCors, ErroHttp, exigirAdmin, gerarSenhaTemporaria, json, tratarErro } from '../_shared/admin.ts'
 
 const ACOES = ['redefinir_senha', 'desativar', 'reativar'] as const
 type Acao = (typeof ACOES)[number]
 
-Deno.serve(async (req) => {
-  if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
+Deno.serve(
+  comCors(async (req) => {
   if (req.method !== 'POST') return json({ erro: 'Método não permitido.' }, 405)
 
   try {
@@ -57,4 +57,5 @@ Deno.serve(async (req) => {
   } catch (erro) {
     return tratarErro(erro)
   }
-})
+  }),
+)

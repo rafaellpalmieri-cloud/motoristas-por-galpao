@@ -414,13 +414,14 @@ enabled = true
 # and column/key alignment. Set to "null" to emit raw, unformatted SQL.
 # format_options = "{\"keywordCase\":\"upper\",\"indent\":2,\"maxWidth\":180,\"commaStyle\":\"trailing\"}"
 
-# Edge Functions deste app. verify_jwt = true faz o gateway exigir um JWT válido;
-# a própria função ainda confere se o usuário é admin.
+# Edge Functions de admin. verify_jwt = false porque o projeto assina os JWTs com
+# chaves assimétricas (ES256), que o verify_jwt do gateway não aceita. A segurança
+# fica dentro da função: auth.getUser(token) + eh_admin() antes de qualquer ação.
 [functions.admin-criar-usuario]
-verify_jwt = true
+verify_jwt = false
 
 [functions.admin-gerir-usuario]
-verify_jwt = true
+verify_jwt = false
 
 # Chamada pelo Apps Script da planilha (sem JWT); autentica por x-sync-token.
 [functions.sincronizar-planilha]

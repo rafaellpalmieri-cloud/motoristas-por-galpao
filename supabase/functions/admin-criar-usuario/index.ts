@@ -3,7 +3,7 @@
 // Devolve a senha temporária UMA vez.
 // Corpo: { "nome", "email", "telefone", "papel": "dispatcher" | "admin", "galpoes": ["SRJ1", ...] }
 import {
-  corsHeaders,
+  comCors,
   ErroHttp,
   exigirAdmin,
   gerarSenhaTemporaria,
@@ -13,8 +13,8 @@ import {
   validarTelefone,
 } from '../_shared/admin.ts'
 
-Deno.serve(async (req) => {
-  if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
+Deno.serve(
+  comCors(async (req) => {
   if (req.method !== 'POST') return json({ erro: 'Método não permitido.' }, 405)
 
   try {
@@ -72,4 +72,5 @@ Deno.serve(async (req) => {
   } catch (erro) {
     return tratarErro(erro)
   }
-})
+  }),
+)
