@@ -1,0 +1,12 @@
+codigo,nome_completo,celular,placa,galpao,status,modal,inativo_desde
+FAKE-1001,Ana Teste Silva,21900001001,TST1A01,SRJ1,ativo,Moto,
+FAKE-1002,Bruno Exemplo Souza,(21) 90000-1002,TST1A02,SRJ1,ativo,Carro,
+FAKE-1003,Carla Ficticia Lima,21900001003,TST1A03,srj1,inativo,Van,01/09/2026
+FAKE-1004,Diego Demo Rocha,21900001004,TST2B04,SRJ2,ativo,Moto,
+FAKE-1005,Elisa Modelo Costa,21900001005,TST2B05,SRJ2,ativo,Carro,
+FAKE-1006,Fabio Amostra Dias,21900001006,TST4C06, srj 4 ,ativo,Moto,
+FAKE-1007,Gabi Prova Martins,21900001007,TST9D07,HUB,ativo,Van,
+FAKE-1008,Hugo Semgalpao Alves,21900001008,TST0E08,,ativo,Moto,
+,Linha Sem Codigo,21900001009,TST0F09,SRJ1,ativo,Moto,
+FAKE-1010,Galpao Errado,21900001010,TST0G10,SRJ99,ativo,Moto,
+FAKE-1011,Status Errado,21900001011,TST0H11,SRJ2,talvez,Moto,

@@ -1,0 +1,389 @@
+-- =====================================================================
+-- Testes de segurança (RLS e funções) — Motoristas por Galpão
+--
+-- Como rodar:
+--   a) Local, sem Docker:   npm run test:rls
+--   b) No projeto Supabase: cole tudo no SQL Editor e clique em Run.
+--      Tudo roda dentro de BEGIN ... ROLLBACK: nada fica gravado.
+--
+-- Cada verificação imprime "OK: ..." (aba de mensagens/NOTICE).
+-- Se algo falhar, o script para com "FALHOU: ...".
+--
+-- Usuários e motoristas abaixo são FICTÍCIOS.
+-- =====================================================================
+begin;
+
+-- ---------------------------------------------------------------------
+-- Preparação (como postgres)
+-- ---------------------------------------------------------------------
+insert into auth.users (id, email) values
+  ('00000000-0000-4000-a000-000000000001', 'admin.teste@exemplo.test'),
+  ('00000000-0000-4000-a000-000000000002', 'disp.srj1@exemplo.test'),
+  ('00000000-0000-4000-a000-000000000003', 'disp.srj2@exemplo.test'),
+  ('00000000-0000-4000-a000-000000000004', 'disp.desativado@exemplo.test');
+
+insert into public.perfis (user_id, nome, email, ativo, trocar_senha, alertas_vistos_em) values
+  ('00000000-0000-4000-a000-000000000001', 'Admin Teste',      'admin.teste@exemplo.test',      true,  false, now() - interval '1 day'),
+  ('00000000-0000-4000-a000-000000000002', 'Dispatcher SRJ1',  'disp.srj1@exemplo.test',        true,  false, now() - interval '1 day'),
+  ('00000000-0000-4000-a000-000000000003', 'Dispatcher SRJ2',  'disp.srj2@exemplo.test',        true,  false, now() - interval '1 day'),
+  ('00000000-0000-4000-a000-000000000004', 'Disp Desativado',  'disp.desativado@exemplo.test',  false, false, now() - interval '1 day');
+
+insert into public.user_roles (user_id, role) values
+  ('00000000-0000-4000-a000-000000000001', 'admin'),
+  ('00000000-0000-4000-a000-000000000002', 'dispatcher'),
+  ('00000000-0000-4000-a000-000000000003', 'dispatcher'),
+  ('00000000-0000-4000-a000-000000000004', 'dispatcher');
+
+insert into public.dispatcher_galpoes (user_id, galpao) values
+  ('00000000-0000-4000-a000-000000000002', 'SRJ1'),
+  ('00000000-0000-4000-a000-000000000003', 'SRJ2'),
+  ('00000000-0000-4000-a000-000000000004', 'SRJ1');
+
+insert into public.motoristas (id, codigo, nome_completo, celular, placa, modal, galpao, status) values
+  ('10000000-0000-4000-a000-000000000001', 'TESTE-SRJ1', 'Motorista Ficticio Um',   '21900000101', 'TST0001', 'Moto',  'SRJ1', 'ativo'),
+  ('10000000-0000-4000-a000-000000000002', 'TESTE-SRJ2', 'Motorista Ficticio Dois', '21900000102', 'TST0002', 'Carro', 'SRJ2', 'ativo'),
+  ('10000000-0000-4000-a000-000000000003', 'TESTE-NULO', 'Motorista Sem Galpao',    '21900000103', 'TST0003', 'Van',   null,   'ativo');
+
+-- =====================================================================
+-- 1. Papel anon não lê nada
+-- =====================================================================
+select set_config('request.jwt.claims', '{"role":"anon"}', true);
+set local role anon;
+
+do $$
+begin
+  begin
+    perform 1 from public.motoristas limit 1;
+    raise exception 'FALHOU: anon conseguiu ler motoristas';
+  exception when insufficient_privilege then raise notice 'OK: anon não lê motoristas';
+  end;
+
+  begin
+    perform 1 from public.motorista_historico limit 1;
+    raise exception 'FALHOU: anon conseguiu ler motorista_historico';
+  exception when insufficient_privilege then raise notice 'OK: anon não lê histórico';
+  end;
+
+  begin
+    perform 1 from public.perfis limit 1;
+    raise exception 'FALHOU: anon conseguiu ler perfis';
+  exception when insufficient_privilege then raise notice 'OK: anon não lê perfis';
+  end;
+
+  begin
+    perform 1 from public.user_roles limit 1;
+    raise exception 'FALHOU: anon conseguiu ler user_roles';
+  exception when insufficient_privilege then raise notice 'OK: anon não lê user_roles';
+  end;
+
+  begin
+    perform 1 from public.dispatcher_galpoes limit 1;
+    raise exception 'FALHOU: anon conseguiu ler dispatcher_galpoes';
+  exception when insufficient_privilege then raise notice 'OK: anon não lê dispatcher_galpoes';
+  end;
+
+  begin
+    perform public.alterar_status_motorista('10000000-0000-4000-a000-000000000001', 'inativo', 'Parou de rodar', null);
+    raise exception 'FALHOU: anon executou alterar_status_motorista';
+  exception when insufficient_privilege then raise notice 'OK: anon não executa alterar_status_motorista';
+  end;
+
+  begin
+    perform public.importar_motoristas('[]'::jsonb);
+    raise exception 'FALHOU: anon executou importar_motoristas';
+  exception when insufficient_privilege then raise notice 'OK: anon não executa importar_motoristas';
+  end;
+end;
+$$;
+
+reset role;
+
+-- =====================================================================
+-- 2. Dispatcher do SRJ1
+-- =====================================================================
+select set_config('request.jwt.claims', '{"sub":"00000000-0000-4000-a000-000000000002","role":"authenticated"}', true);
+set local role authenticated;
+
+do $$
+declare n integer;
+begin
+  -- Lê o próprio galpão
+  select count(*) into n from public.motoristas where codigo = 'TESTE-SRJ1';
+  if n <> 1 then raise exception 'FALHOU: dispatcher SRJ1 não vê motorista do SRJ1'; end if;
+  raise notice 'OK: dispatcher SRJ1 vê motorista do SRJ1';
+
+  -- Não lê SRJ2
+  select count(*) into n from public.motoristas where codigo = 'TESTE-SRJ2';
+  if n <> 0 then raise exception 'FALHOU: dispatcher SRJ1 leu motorista do SRJ2'; end if;
+  raise notice 'OK: dispatcher SRJ1 não lê motorista do SRJ2';
+
+  -- Não lê sem galpão
+  select count(*) into n from public.motoristas where galpao is null;
+  if n <> 0 then raise exception 'FALHOU: dispatcher SRJ1 leu motorista sem galpão'; end if;
+  raise notice 'OK: dispatcher SRJ1 não lê motoristas sem galpão';
+
+  -- Não altera SRJ2 pela função
+  begin
+    perform public.alterar_status_motorista('10000000-0000-4000-a000-000000000002', 'inativo', 'Parou de rodar', null);
+    raise exception 'FALHOU: dispatcher SRJ1 inativou motorista do SRJ2';
+  exception when insufficient_privilege then raise notice 'OK: dispatcher SRJ1 não altera motorista do SRJ2';
+  end;
+
+  -- UPDATE direto não afeta nenhuma linha (nem do próprio galpão)
+  update public.motoristas set status = 'inativo' where codigo in ('TESTE-SRJ1', 'TESTE-SRJ2');
+  get diagnostics n = row_count;
+  if n <> 0 then raise exception 'FALHOU: UPDATE direto em motoristas alterou % linha(s)', n; end if;
+  raise notice 'OK: UPDATE direto em motoristas não altera nada';
+
+  -- DELETE direto não afeta nenhuma linha
+  delete from public.motoristas where codigo = 'TESTE-SRJ1';
+  get diagnostics n = row_count;
+  if n <> 0 then raise exception 'FALHOU: DELETE direto em motoristas apagou % linha(s)', n; end if;
+  raise notice 'OK: DELETE direto em motoristas não apaga nada';
+
+  -- INSERT direto é bloqueado
+  begin
+    insert into public.motoristas (codigo, nome_completo, galpao, status) values ('TESTE-INVASOR', 'X', 'SRJ1', 'ativo');
+    raise exception 'FALHOU: dispatcher inseriu motorista diretamente';
+  exception when insufficient_privilege then raise notice 'OK: INSERT direto em motoristas é bloqueado';
+  end;
+
+  -- INSERT direto no histórico é bloqueado
+  begin
+    insert into public.motorista_historico (motorista_id, galpao, status_novo) values ('10000000-0000-4000-a000-000000000001', 'SRJ1', 'inativo');
+    raise exception 'FALHOU: dispatcher gravou histórico diretamente';
+  exception when insufficient_privilege then raise notice 'OK: escrita direta no histórico é bloqueada';
+  end;
+
+  -- user_roles: só o próprio
+  select count(*) into n from public.user_roles where user_id <> '00000000-0000-4000-a000-000000000002';
+  if n <> 0 then raise exception 'FALHOU: dispatcher leu user_roles de outros'; end if;
+  select count(*) into n from public.user_roles;
+  if n <> 1 then raise exception 'FALHOU: dispatcher não lê o próprio user_roles'; end if;
+  raise notice 'OK: dispatcher lê só o próprio user_roles';
+
+  -- perfis e dispatcher_galpoes: só o próprio
+  select count(*) into n from public.perfis where user_id <> '00000000-0000-4000-a000-000000000002';
+  if n <> 0 then raise exception 'FALHOU: dispatcher leu perfis de outros'; end if;
+  select count(*) into n from public.dispatcher_galpoes where user_id <> '00000000-0000-4000-a000-000000000002';
+  if n <> 0 then raise exception 'FALHOU: dispatcher leu galpões de outros'; end if;
+  raise notice 'OK: dispatcher lê só o próprio perfil e os próprios galpões';
+
+  -- Não consegue se promover a admin
+  begin
+    insert into public.user_roles (user_id, role) values ('00000000-0000-4000-a000-000000000002', 'admin');
+    raise exception 'FALHOU: dispatcher se promoveu a admin';
+  exception when insufficient_privilege then raise notice 'OK: dispatcher não se promove a admin';
+  end;
+
+  -- Não consegue se vincular a outro galpão
+  begin
+    insert into public.dispatcher_galpoes (user_id, galpao) values ('00000000-0000-4000-a000-000000000002', 'SRJ2');
+    raise exception 'FALHOU: dispatcher se vinculou a outro galpão';
+  exception when insufficient_privilege then raise notice 'OK: dispatcher não se vincula a outro galpão';
+  end;
+
+  -- Não consegue se reativar / editar perfil
+  update public.perfis set ativo = true, trocar_senha = false where user_id = '00000000-0000-4000-a000-000000000002';
+  get diagnostics n = row_count;
+  if n <> 0 then raise exception 'FALHOU: dispatcher editou o próprio perfil diretamente'; end if;
+  raise notice 'OK: dispatcher não edita perfil diretamente';
+
+  -- alterar_status sem motivo falha
+  begin
+    perform public.alterar_status_motorista('10000000-0000-4000-a000-000000000001', 'inativo', null, null);
+    raise exception 'FALHOU: inativou sem motivo';
+  exception when invalid_parameter_value then raise notice 'OK: inativar sem motivo falha';
+  end;
+
+  -- motivo inválido falha
+  begin
+    perform public.alterar_status_motorista('10000000-0000-4000-a000-000000000001', 'inativo', 'Qualquer coisa', null);
+    raise exception 'FALHOU: aceitou motivo inválido';
+  exception when invalid_parameter_value then raise notice 'OK: motivo inválido falha';
+  end;
+
+  -- "Outro" sem observação falha
+  begin
+    perform public.alterar_status_motorista('10000000-0000-4000-a000-000000000001', 'inativo', 'Outro', '   ');
+    raise exception 'FALHOU: aceitou Outro sem observação';
+  exception when invalid_parameter_value then raise notice 'OK: motivo Outro sem observação falha';
+  end;
+
+  -- status inválido falha
+  begin
+    perform public.alterar_status_motorista('10000000-0000-4000-a000-000000000001', 'suspenso', null, null);
+    raise exception 'FALHOU: aceitou status inválido';
+  exception when invalid_parameter_value then raise notice 'OK: status inválido falha';
+  end;
+
+  -- Inativação válida funciona e grava histórico
+  perform public.alterar_status_motorista('10000000-0000-4000-a000-000000000001', 'inativo', 'Parou de rodar', 'teste automatizado');
+  select count(*) into n from public.motoristas
+   where codigo = 'TESTE-SRJ1' and status = 'inativo' and inativo_desde is not null and motivo_inativacao = 'Parou de rodar';
+  if n <> 1 then raise exception 'FALHOU: inativação válida não aplicada'; end if;
+  select count(*) into n from public.motorista_historico
+   where motorista_id = '10000000-0000-4000-a000-000000000001'
+     and status_anterior = 'ativo' and status_novo = 'inativo' and motivo = 'Parou de rodar'
+     and alterado_por = '00000000-0000-4000-a000-000000000002' and alterado_por_nome = 'Dispatcher SRJ1';
+  if n <> 1 then raise exception 'FALHOU: histórico da inativação não gravado'; end if;
+  raise notice 'OK: inativação válida aplica status e grava histórico';
+
+  -- importar_motoristas por dispatcher falha
+  begin
+    perform public.importar_motoristas('[{"codigo":"TESTE-X","galpao":"SRJ1","status":"ativo"}]'::jsonb);
+    raise exception 'FALHOU: dispatcher importou motoristas';
+  exception when insufficient_privilege then raise notice 'OK: importar_motoristas por dispatcher falha';
+  end;
+
+  -- exportar_motoristas por dispatcher falha
+  begin
+    perform * from public.exportar_motoristas();
+    raise exception 'FALHOU: dispatcher exportou motoristas';
+  exception when insufficient_privilege then raise notice 'OK: exportar_motoristas por dispatcher falha';
+  end;
+end;
+$$;
+
+reset role;
+
+-- =====================================================================
+-- 3. Dispatcher do SRJ2: não vê histórico do SRJ1; vê alerta só do SRJ2
+-- =====================================================================
+select set_config('request.jwt.claims', '{"sub":"00000000-0000-4000-a000-000000000003","role":"authenticated"}', true);
+set local role authenticated;
+
+do $$
+declare n integer;
+begin
+  select count(*) into n from public.motorista_historico
+   where motorista_id = '10000000-0000-4000-a000-000000000001';
+  if n <> 0 then raise exception 'FALHOU: dispatcher SRJ2 leu histórico do SRJ1'; end if;
+  raise notice 'OK: dispatcher SRJ2 não lê histórico do SRJ1';
+
+  select count(*) into n from public.motoristas where codigo = 'TESTE-SRJ1';
+  if n <> 0 then raise exception 'FALHOU: dispatcher SRJ2 leu motorista do SRJ1'; end if;
+  raise notice 'OK: dispatcher SRJ2 não lê motorista do SRJ1';
+end;
+$$;
+
+reset role;
+
+-- =====================================================================
+-- 4. Dispatcher desativado não vê nada
+-- =====================================================================
+select set_config('request.jwt.claims', '{"sub":"00000000-0000-4000-a000-000000000004","role":"authenticated"}', true);
+set local role authenticated;
+
+do $$
+declare n integer;
+begin
+  select count(*) into n from public.motoristas;
+  if n <> 0 then raise exception 'FALHOU: dispatcher desativado leu % motorista(s)', n; end if;
+  raise notice 'OK: dispatcher desativado não lê motoristas';
+
+  begin
+    perform public.alterar_status_motorista('10000000-0000-4000-a000-000000000001', 'ativo', null, null);
+    raise exception 'FALHOU: dispatcher desativado alterou status';
+  exception when insufficient_privilege then raise notice 'OK: dispatcher desativado não altera status';
+  end;
+end;
+$$;
+
+reset role;
+
+-- =====================================================================
+-- 5. Admin: vê tudo, importa, reimportação não sobrescreve status
+-- =====================================================================
+select set_config('request.jwt.claims', '{"sub":"00000000-0000-4000-a000-000000000001","role":"authenticated"}', true);
+set local role authenticated;
+
+do $$
+declare
+  n   integer;
+  r   jsonb;
+  csv jsonb := '[
+    {"linha":2,"codigo":"TESTE-SRJ1","nome_completo":"Nome Atualizado","celular":"21900000999","placa":"tst9999","modal":"Carro","galpao":" srj 1 ","status":"ativo","inativo_desde":""},
+    {"linha":3,"codigo":"TESTE-NOVO","nome_completo":"Motorista Novo Ficticio","celular":"21900000104","placa":"TST0004","modal":"Moto","galpao":"srj2","status":"inativo","inativo_desde":"05/09/2026"},
+    {"linha":4,"codigo":"","nome_completo":"Sem codigo","galpao":"SRJ1","status":"ativo"},
+    {"linha":5,"codigo":"TESTE-GALPAO-RUIM","galpao":"SRJ99","status":"ativo"},
+    {"linha":6,"codigo":"TESTE-STATUS-RUIM","galpao":"SRJ1","status":"talvez"}
+  ]';
+begin
+  select count(*) into n from public.motoristas where galpao is null;
+  if n <> 1 then raise exception 'FALHOU: admin não vê motorista sem galpão'; end if;
+  raise notice 'OK: admin vê motoristas sem galpão';
+
+  select count(*) into n from public.user_roles;
+  if n < 4 then raise exception 'FALHOU: admin não lê todos os user_roles'; end if;
+  raise notice 'OK: admin lê todos os user_roles';
+
+  r := public.importar_motoristas(csv);
+  if (r ->> 'novos')::int <> 1 or (r ->> 'atualizados')::int <> 1 or jsonb_array_length(r -> 'erros') <> 3 then
+    raise exception 'FALHOU: relatório da importação inesperado: %', r;
+  end if;
+  raise notice 'OK: importação retorna novos=1, atualizados=1, erros=3';
+
+  -- TESTE-SRJ1 estava inativo (seção 2) e o CSV diz ativo: status NÃO muda.
+  select count(*) into n from public.motoristas
+   where codigo = 'TESTE-SRJ1' and status = 'inativo' and inativo_desde is not null
+     and nome_completo = 'Nome Atualizado' and placa = 'TST9999' and galpao = 'SRJ1';
+  if n <> 1 then raise exception 'FALHOU: importação sobrescreveu status ou não atualizou dados'; end if;
+  raise notice 'OK: importação atualiza dados mas não sobrescreve status';
+
+  select count(*) into n from public.motoristas
+   where codigo = 'TESTE-NOVO' and status = 'inativo' and inativo_desde = date '2026-09-05' and galpao = 'SRJ2';
+  if n <> 1 then raise exception 'FALHOU: motorista novo não entrou com status/galpão do CSV'; end if;
+  raise notice 'OK: motorista novo entra com status do CSV e galpão normalizado';
+
+  -- Reimportar o mesmo CSV: nada vira novo e status continua igual
+  r := public.importar_motoristas(csv);
+  if (r ->> 'novos')::int <> 0 or (r ->> 'atualizados')::int <> 2 then
+    raise exception 'FALHOU: reimportação inesperada: %', r;
+  end if;
+  select count(*) into n from public.motoristas where codigo = 'TESTE-SRJ1' and status = 'inativo';
+  if n <> 1 then raise exception 'FALHOU: reimportação sobrescreveu status'; end if;
+  raise notice 'OK: reimportar o mesmo CSV não sobrescreve status';
+
+  -- Exportação
+  select count(*) into n from public.exportar_motoristas() e where e.codigo = 'TESTE-SRJ1' and e.atualizado_por_nome = 'Dispatcher SRJ1';
+  if n <> 1 then raise exception 'FALHOU: exportação sem autor da última alteração'; end if;
+  raise notice 'OK: exportação traz autor da última alteração';
+
+  -- Alertas: admin vê a inativação feita pelo dispatcher SRJ1
+  select count(*) into n from public.motorista_historico h
+   join public.perfis p on p.user_id = '00000000-0000-4000-a000-000000000001'
+   where h.status_novo = 'inativo' and h.alterado_em > p.alertas_vistos_em;
+  if n < 1 then raise exception 'FALHOU: admin não vê alerta de inativação'; end if;
+  perform public.marcar_alertas_vistos();
+  raise notice 'OK: alerta de inativação visível ao admin';
+end;
+$$;
+
+reset role;
+
+-- =====================================================================
+-- 6. Dispatcher SRJ1 consegue reativar com histórico
+-- =====================================================================
+select set_config('request.jwt.claims', '{"sub":"00000000-0000-4000-a000-000000000002","role":"authenticated"}', true);
+set local role authenticated;
+
+do $$
+declare n integer;
+begin
+  perform public.alterar_status_motorista('10000000-0000-4000-a000-000000000001', 'ativo', null, 'voltou');
+  select count(*) into n from public.motoristas
+   where codigo = 'TESTE-SRJ1' and status = 'ativo' and inativo_desde is null and motivo_inativacao is null;
+  if n <> 1 then raise exception 'FALHOU: reativação não aplicada'; end if;
+  select count(*) into n from public.motorista_historico
+   where motorista_id = '10000000-0000-4000-a000-000000000001' and status_novo = 'ativo';
+  if n <> 1 then raise exception 'FALHOU: histórico da reativação não gravado'; end if;
+  raise notice 'OK: reativação limpa inativo_desde e grava histórico';
+end;
+$$;
+
+reset role;
+
+do $$ begin raise notice '=== TODOS OS TESTES PASSARAM ==='; end $$;
+
+rollback;
