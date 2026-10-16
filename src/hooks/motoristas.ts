@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '../auth/AuthProvider'
+import { SEM_GALPAO } from '../lib/constantes'
 import { buscarTodas } from '../lib/paginacao'
 import { supabase } from '../lib/supabase'
 import type { Historico, Motorista, Status } from '../lib/tipos'
@@ -142,18 +143,30 @@ export function useContagemAlertas() {
   })
 }
 
-export function useAlertas() {
+export const LIMITE_ALERTAS = 500
+
+export interface FiltrosAlertas {
+  de: string // AAAA-MM-DD (dia inteiro, horário de Brasília)
+  ate: string
+  galpao: string // '' = todos; SEM_GALPAO = sem galpão
+}
+
+/** Inativações no período e galpão escolhidos (a RLS já limita aos galpões do usuário). */
+export function useAlertas({ de, ate, galpao }: FiltrosAlertas) {
   return useQuery({
-    queryKey: ['alertas', 'lista'],
+    queryKey: ['alertas', 'lista', de, ate, galpao],
+    placeholderData: (anterior) => anterior,
     queryFn: async () => {
-      const desde = new Date(Date.now() - 30 * 24 * 3600 * 1000).toISOString()
-      const { data, error } = await supabase
+      // Brasília não tem horário de verão desde 2019: -03:00 fixo.
+      let consulta = supabase
         .from('motorista_historico')
         .select('*, motoristas(nome_completo, placa, codigo)')
         .eq('status_novo', 'inativo')
-        .gte('alterado_em', desde)
-        .order('alterado_em', { ascending: false })
-        .limit(200)
+        .gte('alterado_em', `${de}T00:00:00-03:00`)
+        .lte('alterado_em', `${ate}T23:59:59.999-03:00`)
+      if (galpao === SEM_GALPAO) consulta = consulta.is('galpao', null)
+      else if (galpao) consulta = consulta.eq('galpao', galpao)
+      const { data, error } = await consulta.order('alterado_em', { ascending: false }).limit(LIMITE_ALERTAS)
       if (error) throw error
       return data as Alerta[]
     },
