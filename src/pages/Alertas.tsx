@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../auth/AuthProvider'
-import { Carregando, EstadoErro, EstadoVazio, Pagina } from '../components/ui'
+import { Carregando, EstadoErro, EstadoVazio, Pagina, SeloPlanilha } from '../components/ui'
 import { useAlertas, useMarcarAlertasVistos } from '../hooks/motoristas'
 import { formatarDataHora, tempoRelativo } from '../lib/datas'
 import { mensagemErro } from '../lib/erros'
@@ -26,7 +26,7 @@ export default function Alertas() {
 
   return (
     <Pagina titulo="Alertas">
-      <p className="mb-4 text-slate-600">Motoristas inativados nos últimos 30 dias.</p>
+      <p className="mb-4 text-slate-600">Motoristas inativados nos últimos 30 dias, no app ou na planilha interna.</p>
       {isPending ? (
         <Carregando texto="Carregando alertas…" />
       ) : error ? (
@@ -48,9 +48,12 @@ export default function Alertas() {
                       {a.motoristas?.nome_completo ?? a.motoristas?.codigo ?? 'Motorista'}
                       {a.motoristas?.placa ? <span className="font-normal text-slate-500"> · {a.motoristas.placa}</span> : null}
                     </p>
-                    {novo && (
-                      <span className="rounded-full bg-amber-200 px-2 py-0.5 text-xs font-bold uppercase text-amber-900">Novo</span>
-                    )}
+                    <div className="flex shrink-0 gap-1">
+                      {a.origem === 'planilha' && <SeloPlanilha />}
+                      {novo && (
+                        <span className="rounded-full bg-amber-200 px-2 py-0.5 text-xs font-bold uppercase text-amber-900">Novo</span>
+                      )}
+                    </div>
                   </div>
                   <p className="mt-1 text-rose-700">
                     Inativado{a.motivo ? ` · ${a.motivo}` : ''}

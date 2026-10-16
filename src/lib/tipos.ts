@@ -27,6 +27,7 @@ export interface Historico {
   alterado_por: string | null
   alterado_por_nome: string | null
   alterado_em: string
+  origem: 'app' | 'planilha'
 }
 
 export interface Perfil {

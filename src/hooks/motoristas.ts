@@ -120,7 +120,7 @@ export interface Alerta extends Historico {
   motoristas: { nome_completo: string | null; placa: string | null; codigo: string } | null
 }
 
-/** Quantas inativações feitas por OUTRAS pessoas desde a última visita aos alertas. */
+/** Quantas inativações feitas por OUTRAS pessoas (ou pela planilha) desde a última visita aos alertas. */
 export function useContagemAlertas() {
   const { session, usuario } = useAuth()
   const vistosEm = usuario?.perfil?.alertas_vistos_em
@@ -134,7 +134,8 @@ export function useContagemAlertas() {
         .select('id', { count: 'exact', head: true })
         .eq('status_novo', 'inativo')
         .gt('alterado_em', vistosEm!)
-        .neq('alterado_por', session!.user.id)
+        // Inclui as inativações vindas da planilha (alterado_por nulo).
+        .or(`alterado_por.is.null,alterado_por.neq.${session!.user.id}`)
       if (error) throw error
       return count ?? 0
     },

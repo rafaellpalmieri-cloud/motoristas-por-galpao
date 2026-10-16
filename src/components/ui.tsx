@@ -113,6 +113,13 @@ export function BadgeStatus({ status }: { status: Status }) {
   )
 }
 
+/** Marca mudanças que vieram da planilha interna (Google Sheets). */
+export function SeloPlanilha() {
+  return (
+    <span className="rounded-full bg-violet-100 px-2 py-0.5 text-xs font-bold uppercase text-violet-800">Planilha</span>
+  )
+}
+
 export function Modal({
   aberto,
   titulo,

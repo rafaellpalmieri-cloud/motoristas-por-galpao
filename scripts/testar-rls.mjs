@@ -36,24 +36,32 @@ const exposicaoAutomatica = `
   alter default privileges in schema public grant all on sequences to anon, authenticated, service_role;
 `
 
-const db = new PGlite()
-let falhou = false
-try {
-  await db.exec(ambienteSupabase)
-  if (process.env.SEM_EXPOSICAO !== '1') await db.exec(exposicaoAutomatica)
-  else console.log('Simulando "Automatically expose new tables" DESLIGADO\n')
-  for (const arquivo of readdirSync(pastaMigracoes).filter((f) => f.endsWith('.sql')).sort()) {
-    console.log(`Migração: ${arquivo}`)
-    await db.exec(readFileSync(join(pastaMigracoes, arquivo), 'utf8'))
+// Roda nos dois cenários do painel: exposição automática ligada e desligada
+// (o projeto deste app usa DESLIGADA). SEM_EXPOSICAO=1 roda só o desligado.
+async function executar(comExposicao) {
+  console.log(`\n=== "Automatically expose new tables" ${comExposicao ? 'LIGADO' : 'DESLIGADO'} ===`)
+  const db = new PGlite()
+  try {
+    await db.exec(ambienteSupabase)
+    if (comExposicao) await db.exec(exposicaoAutomatica)
+    for (const arquivo of readdirSync(pastaMigracoes).filter((f) => f.endsWith('.sql')).sort()) {
+      console.log(`Migração: ${arquivo}`)
+      await db.exec(readFileSync(join(pastaMigracoes, arquivo), 'utf8'))
+    }
+    console.log('\nTestes de segurança:')
+    await db.exec(readFileSync(arquivoTeste, 'utf8'), {
+      onNotice: (n) => console.log(`  ${n.message}`),
+    })
+    return true
+  } catch (erro) {
+    console.error(`\n${erro.message}`)
+    return false
+  } finally {
+    await db.close()
   }
-  console.log('\nTestes de segurança:')
-  await db.exec(readFileSync(arquivoTeste, 'utf8'), {
-    onNotice: (n) => console.log(`  ${n.message}`),
-  })
-} catch (erro) {
-  falhou = true
-  console.error(`\n${erro.message}`)
-} finally {
-  await db.close()
 }
+
+const cenarios = process.env.SEM_EXPOSICAO === '1' ? [false] : [false, true]
+let falhou = false
+for (const c of cenarios) if (!(await executar(c))) falhou = true
 process.exit(falhou ? 1 : 0)

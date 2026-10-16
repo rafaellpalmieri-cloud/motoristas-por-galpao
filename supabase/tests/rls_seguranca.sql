@@ -384,6 +384,118 @@ $$;
 
 reset role;
 
+-- =====================================================================
+-- 7. Sincronização da planilha (aba INATIVOS)
+-- =====================================================================
+select set_config('request.jwt.claims', '{"sub":"00000000-0000-4000-a000-000000000001","role":"authenticated"}', true);
+set local role authenticated;
+
+do $$
+begin
+  begin
+    perform public.sincronizar_inativos_planilha('[]'::jsonb);
+    raise exception 'FALHOU: usuário logado (admin) chamou a sincronização direto';
+  exception when insufficient_privilege then raise notice 'OK: sincronização não pode ser chamada pelo app (nem por admin)';
+  end;
+  begin
+    perform 1 from public.planilha_inativacoes_processadas limit 1;
+    raise exception 'FALHOU: usuário logado leu planilha_inativacoes_processadas';
+  exception when insufficient_privilege then raise notice 'OK: controle da sincronização é inacessível ao app';
+  end;
+end;
+$$;
+
+reset role;
+select set_config('request.jwt.claims', '{"role":"service_role"}', true);
+set local role service_role;
+
+do $$
+begin
+  -- As Edge Functions de admin gravam perfil, papel e galpões como service_role.
+  if not (has_table_privilege('service_role', 'public.perfis', 'INSERT')
+      and has_table_privilege('service_role', 'public.perfis', 'UPDATE')
+      and has_table_privilege('service_role', 'public.user_roles', 'INSERT')
+      and has_table_privilege('service_role', 'public.dispatcher_galpoes', 'INSERT')) then
+    raise exception 'FALHOU: service_role sem privilégios para as Edge Functions de admin';
+  end if;
+  raise notice 'OK: service_role pode criar e atualizar perfis, papéis e galpões';
+end;
+$$;
+
+do $$
+declare
+  r      jsonb;
+  linhas jsonb := '[
+    {"linha":2,"nome_completo":"Motorista Ficticio Dois","placa":"tst-0002","celular":"","galpao":"SRJ2","data":"10/10/2026","motivo":"Saiu da operação","cpf":"00000000000"},
+    {"linha":3,"nome_completo":"Sem Galpao","placa":"","celular":"(21) 90000-0103","galpao":"","data":"","motivo":"faltou muito"},
+    {"linha":4,"nome_completo":"Nao Existe","placa":"ZZZ9Z99","celular":"21911112222","data":"01/10/2026"},
+    {"linha":5,"nome_completo":"Sem Chave","placa":"","celular":""}
+  ]';
+begin
+  r := public.sincronizar_inativos_planilha(linhas);
+  if (r ->> 'inativados')::int <> 2 or (r ->> 'qtd_nao_encontrados')::int <> 1 or jsonb_array_length(r -> 'erros') <> 1 then
+    raise exception 'FALHOU: resultado inesperado da sincronização: %', r;
+  end if;
+  raise notice 'OK: sincronização inativa por placa e por celular, aponta não encontrados e erros';
+
+  if not exists (select 1 from public.motoristas where codigo = 'TESTE-SRJ2' and status = 'inativo'
+                 and inativo_desde = date '2026-10-10' and motivo_inativacao = 'Saiu da operação') then
+    raise exception 'FALHOU: motorista da planilha não foi inativado com data e motivo';
+  end if;
+  if not exists (select 1 from public.motoristas where codigo = 'TESTE-NULO' and status = 'inativo' and motivo_inativacao = 'Outro') then
+    raise exception 'FALHOU: motivo livre da planilha não virou "Outro"';
+  end if;
+  if not exists (select 1 from public.motorista_historico h join public.motoristas m on m.id = h.motorista_id
+                 where m.codigo = 'TESTE-NULO' and h.origem = 'planilha' and h.alterado_por is null
+                   and h.alterado_por_nome = 'Planilha' and h.observacao = 'Inativado na planilha: faltou muito') then
+    raise exception 'FALHOU: histórico da planilha incompleto';
+  end if;
+  raise notice 'OK: histórico registra origem planilha, motivo e observação';
+
+  -- Reenviar a mesma aba não repete nada.
+  r := public.sincronizar_inativos_planilha(linhas);
+  if (r ->> 'inativados')::int <> 0 or (r ->> 'ja_processados')::int <> 2 then
+    raise exception 'FALHOU: reenvio da planilha não foi idempotente: %', r;
+  end if;
+  raise notice 'OK: reenviar a mesma aba não duplica inativações';
+end;
+$$;
+
+reset role;
+
+-- Dispatcher SRJ2 vê o alerta da planilha e reativa; a planilha não re-inativa.
+select set_config('request.jwt.claims', '{"sub":"00000000-0000-4000-a000-000000000003","role":"authenticated"}', true);
+set local role authenticated;
+
+do $$
+begin
+  if not exists (select 1 from public.motorista_historico where origem = 'planilha' and galpao = 'SRJ2') then
+    raise exception 'FALHOU: dispatcher SRJ2 não vê a inativação vinda da planilha';
+  end if;
+  if exists (select 1 from public.motorista_historico h where h.origem = 'planilha' and h.galpao is null) then
+    raise exception 'FALHOU: dispatcher SRJ2 viu inativação de motorista sem galpão';
+  end if;
+  raise notice 'OK: inativação da planilha aparece só para o galpão certo';
+  perform public.alterar_status_motorista('10000000-0000-4000-a000-000000000002', 'ativo', null, 'voltou');
+end;
+$$;
+
+reset role;
+select set_config('request.jwt.claims', '{"role":"service_role"}', true);
+set local role service_role;
+
+do $$
+begin
+  perform public.sincronizar_inativos_planilha('[{"linha":2,"placa":"TST0002","data":"10/10/2026","motivo":"Saiu da operação"}]'::jsonb);
+  if not exists (select 1 from public.motoristas where codigo = 'TESTE-SRJ2' and status = 'ativo') then
+    raise exception 'FALHOU: planilha re-inativou motorista reativado no app';
+  end if;
+  raise notice 'OK: motorista reativado no app não é re-inativado pela mesma linha da planilha';
+end;
+$$;
+
+reset role;
+
 do $$ begin raise notice '=== TODOS OS TESTES PASSARAM ==='; end $$;
 
 rollback;

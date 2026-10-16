@@ -1,7 +1,7 @@
 import { useState, type ReactNode } from 'react'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { ModalStatus } from '../components/ModalStatus'
-import { BadgeStatus, Botao, Carregando, Cartao, EstadoErro, EstadoVazio, Pagina } from '../components/ui'
+import { BadgeStatus, Botao, Carregando, Cartao, EstadoErro, EstadoVazio, Pagina, SeloPlanilha } from '../components/ui'
 import { useHistorico, useMotorista } from '../hooks/motoristas'
 import { formatarData, formatarDataHora } from '../lib/datas'
 import { mensagemErro } from '../lib/erros'
@@ -107,6 +107,7 @@ export default function MotoristaDetalhe() {
                 {h.status_anterior && <BadgeStatus status={h.status_anterior} />}
                 <span aria-hidden>→</span>
                 <BadgeStatus status={h.status_novo} />
+                {h.origem === 'planilha' && <SeloPlanilha />}
               </div>
               {h.motivo && <p className="mt-2 font-medium text-slate-800">{h.motivo}</p>}
               {h.observacao && <p className="mt-1 text-slate-600">“{h.observacao}”</p>}

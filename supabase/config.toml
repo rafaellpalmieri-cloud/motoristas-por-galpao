@@ -421,3 +421,7 @@ verify_jwt = true
 
 [functions.admin-gerir-usuario]
 verify_jwt = true
+
+# Chamada pelo Apps Script da planilha (sem JWT); autentica por x-sync-token.
+[functions.sincronizar-planilha]
+verify_jwt = false
