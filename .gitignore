@@ -30,3 +30,5 @@ Thumbs.db
 supabase/.planilha_sync_token
 supabase/.env.zapi
 supabase/.notificar_token
+supabase/.vapid_private
+deno.lock

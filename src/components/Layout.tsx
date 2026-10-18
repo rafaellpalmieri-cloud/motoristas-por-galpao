@@ -2,6 +2,7 @@ import { NavLink, Outlet } from 'react-router-dom'
 import { useAuth } from '../auth/AuthProvider'
 import { useContagemAlertas } from '../hooks/motoristas'
 import { usePendentes } from '../hooks/solicitacoes'
+import { FaixaNotificacoes } from './AtivarNotificacoes'
 
 function ItemNav({ para, icone, rotulo, selo }: { para: string; icone: string; rotulo: string; selo?: number }) {
   return (
@@ -64,6 +65,8 @@ export function Layout() {
           </div>
         </div>
       </header>
+
+      <FaixaNotificacoes />
 
       <main>
         <Outlet />

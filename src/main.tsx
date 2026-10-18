@@ -5,6 +5,9 @@ import App from './App'
 import { AuthProvider } from './auth/AuthProvider'
 import { ToastProvider } from './components/Toast'
 import './index.css'
+import { registrarServiceWorker } from './lib/push'
+
+registrarServiceWorker()
 
 const queryClient = new QueryClient({
   defaultOptions: {

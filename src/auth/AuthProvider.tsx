@@ -1,6 +1,7 @@
 import type { Session } from '@supabase/supabase-js'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
+import { desativarPush } from '../lib/push'
 import { supabase } from '../lib/supabase'
 import type { Papel, Perfil } from '../lib/tipos'
 
@@ -84,6 +85,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     erroUsuario: consulta.error,
     ehAdmin: !!consulta.data?.perfil?.ativo && !!consulta.data?.papeis.includes('admin'),
     sair: async () => {
+      // Este aparelho deixa de receber avisos da conta que está saindo.
+      await desativarPush().catch(() => {})
       await supabase.auth.signOut()
     },
     recarregarUsuario: () => consulta.refetch(),

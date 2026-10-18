@@ -971,6 +971,96 @@ $$;
 
 reset role;
 
+-- =====================================================================
+-- 14. Notificações push: inscrições e aviso de pedido
+-- =====================================================================
+select set_config('request.jwt.claims', '{"sub":"00000000-0000-4000-a000-000000000002","role":"authenticated"}', true);
+set local role authenticated;
+
+do $$
+declare n integer;
+begin
+  perform public.registrar_push('https://push.exemplo.test/aparelho-1', 'chave-p256dh', 'chave-auth', 'teste');
+  select count(*) into n from public.push_inscricoes;
+  if n <> 1 then raise exception 'FALHOU: dispatcher não registrou a própria inscrição'; end if;
+  raise notice 'OK: dispatcher registra notificação no próprio aparelho';
+
+  begin
+    perform public.registrar_push('http://inseguro.test/x', 'a', 'b', null);
+    raise exception 'FALHOU: aceitou endpoint sem https';
+  exception when invalid_parameter_value then raise notice 'OK: inscrição sem https é recusada';
+  end;
+
+  begin
+    insert into public.push_inscricoes (user_id, endpoint, p256dh, auth)
+    values ('00000000-0000-4000-a000-000000000003', 'https://push.exemplo.test/x', 'a', 'b');
+    raise exception 'FALHOU: gravou inscrição direto na tabela';
+  exception when insufficient_privilege then raise notice 'OK: escrita direta em push_inscricoes é bloqueada';
+  end;
+end;
+$$;
+
+reset role;
+select set_config('request.jwt.claims', '{"sub":"00000000-0000-4000-a000-000000000003","role":"authenticated"}', true);
+set local role authenticated;
+
+do $$
+declare n integer;
+begin
+  select count(*) into n from public.push_inscricoes;
+  if n <> 0 then raise exception 'FALHOU: dispatcher viu inscrição de outro usuário'; end if;
+  perform public.remover_push('https://push.exemplo.test/aparelho-1');
+  raise notice 'OK: dispatcher não vê nem remove inscrição de outro usuário';
+
+  -- Mesmo navegador usado por outra pessoa: passa a ser de quem entrou agora.
+  perform public.registrar_push('https://push.exemplo.test/aparelho-1', 'chave-p256dh', 'chave-auth', 'teste');
+  select count(*) into n from public.push_inscricoes where endpoint = 'https://push.exemplo.test/aparelho-1';
+  if n <> 1 then raise exception 'FALHOU: aparelho compartilhado não trocou de dono'; end if;
+  raise notice 'OK: aparelho compartilhado fica com quem entrou por último';
+end;
+$$;
+
+reset role;
+select set_config('request.jwt.claims', '{"role":"anon"}', true);
+set local role anon;
+do $$
+begin
+  begin
+    perform public.registrar_push('https://push.exemplo.test/anon', 'a', 'b', null);
+    raise exception 'FALHOU: anon registrou notificação';
+  exception when insufficient_privilege then raise notice 'OK: anon não registra notificação';
+  end;
+end;
+$$;
+reset role;
+
+do $$
+declare n_antes integer; n_depois integer;
+begin
+  if to_regclass('net._chamadas_teste') is null then
+    raise notice 'OK: (pulado fora do PGlite) aviso de pedido';
+    return;
+  end if;
+  insert into vault.decrypted_secrets values ('notificar_url', 'https://exemplo.test/aviso'), ('notificar_token', 'token-de-teste');
+
+  select count(*) into n_antes from net._chamadas_teste;
+  insert into public.solicitacoes_inativacao (motorista_id, galpao, motivo, solicitado_por, solicitado_por_nome)
+  values ('10000000-0000-4000-a000-000000000002', 'SRJ2', 'Documentação', '00000000-0000-4000-a000-000000000003', 'Dispatcher SRJ2');
+  if not exists (select 1 from net._chamadas_teste where body ->> 'status' = 'pendente' and body ? 'solicitacao_id') then
+    raise exception 'FALHOU: novo pedido não disparou aviso';
+  end if;
+  update public.solicitacoes_inativacao set observacao = 'só texto' where status = 'pendente' and galpao = 'SRJ2';
+  select count(*) into n_depois from net._chamadas_teste;
+  if n_depois <> n_antes + 1 then raise exception 'FALHOU: alteração sem mudar status disparou aviso'; end if;
+  update public.solicitacoes_inativacao set status = 'recusada' where status = 'pendente' and galpao = 'SRJ2';
+  if not exists (select 1 from net._chamadas_teste where body ->> 'status' = 'recusada') then
+    raise exception 'FALHOU: pedido recusado não disparou aviso';
+  end if;
+  raise notice 'OK: pedido novo e decidido disparam aviso (e só quando o status muda)';
+  delete from vault.decrypted_secrets;
+end;
+$$;
+
 do $$ begin raise notice '=== TODOS OS TESTES PASSARAM ==='; end $$;
 
 rollback;

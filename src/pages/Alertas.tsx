@@ -1,6 +1,7 @@
 import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../auth/AuthProvider'
+import { CartaoNotificacoes } from '../components/AtivarNotificacoes'
 import { Carregando, EstadoErro, EstadoVazio, Pagina, SeloPlanilha } from '../components/ui'
 import { LIMITE_ALERTAS, useAlertas, useMarcarAlertasVistos } from '../hooks/motoristas'
 import { GALPOES, SEM_GALPAO } from '../lib/constantes'
@@ -85,6 +86,8 @@ export default function Alertas() {
 
   return (
     <Pagina titulo="Alertas">
+      <CartaoNotificacoes />
+
       <p className="mb-3 text-slate-600">Motoristas inativados no app ou na planilha interna.</p>
 
       <div className="mb-4 flex flex-col gap-2 rounded-2xl border border-slate-200 bg-white p-3">
