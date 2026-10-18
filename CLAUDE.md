@@ -1,0 +1,49 @@
+# CLAUDE.md — Motoristas por Galpão
+
+Instruções para o Claude (e para quem mantiver o projeto). Leia antes de mexer.
+
+## O que é
+
+App web mobile-first (pt-BR) em que dispatchers dos galpões SRJ1, SRJ2, SRJ4, SRJ5, SRJ8, SRJ9, SRJ10, SRJ13, SRJ17 e HUB acompanham motoristas e pedem inativações; admins aprovam. Stack: Vite + React + TypeScript + Tailwind + React Router + TanStack Query + supabase-js; backend Supabase (Postgres + RLS, Auth, Edge Functions em Deno, pg_cron, pg_net, Vault). Visão geral e passo a passo de implantação: `README.md`.
+
+- Site: https://motoristas-por-galpao.vercel.app (Vercel, projeto `motoristas-por-galpao`)
+- Supabase: project-ref **`idihrzbchxaptjgvsjfu`** (nome `motorista-galpao`, organização grátis `motorista-galpao`, região sa-east-1)
+
+## Regras obrigatórias
+
+1. **Antes de qualquer comando contra o Supabase** (`supabase link`, `db push`, `functions deploy`, `secrets set`, `db query` que grave, Vault), mostre o project-ref `idihrzbchxaptjgvsjfu` e **peça confirmação ao usuário**. A confirmação vale para aquele pedido; não generalize.
+2. **Nunca** se conecte ao Supabase de produção da empresa (organização "LoogiRio"; projetos "Loogirio", "loogirio-pagamentos", "Automação Framer"). Também não use o conector MCP do Supabase: ele pode apontar para a conta da empresa. Use só a CLI (`npx supabase ...`).
+3. A chave `service_role` nunca vai para o frontend, o repositório, os arquivos `.env` do frontend ou o chat. Nas Edge Functions ela é injetada automaticamente (`SUPABASE_SERVICE_ROLE_KEY`). O frontend usa só `VITE_SUPABASE_URL` e `VITE_SUPABASE_ANON_KEY`.
+4. Todo SQL vai em `supabase/migrations/` (arquivo novo, numerado em sequência). Não altere o banco pelo painel. Não edite migrações já aplicadas; crie uma nova.
+5. Nunca grave dados reais de motoristas no repositório. Testes e seeds usam só dados fictícios.
+6. **CPF**: por decisão do usuário (18/10/2026), o CPF é guardado. **Admin vê completo; dispatcher vê só mascarado** (`***.456.789-**`), com o mascaramento feito no banco por privilégio de coluna (migração 0012). O CPF **não** vai para WhatsApp, notificações nem para a aba de movimentações. **RG e endereço nunca** entram no app.
+7. Rode `npm run lint`, `npm run build` e `npm run test:rls` antes de dizer que terminou. Para Edge Functions: `npx deno check --node-modules-dir=none supabase/functions/<nome>/index.ts`.
+8. Commits em português, com a linha `Co-Authored-By` que a ferramenta indicar.
+
+## Arquivos de segredo (fora do git, só no computador do usuário)
+
+`.env.local`, `supabase/.planilha_sync_token`, `supabase/.notificar_token`, `supabase/.vapid_private`, `supabase/.env.zapi`. Nunca imprima o conteúdo deles no chat. Para cadastrar um segredo, leia o arquivo no próprio comando (ex.: `secrets set "X=$(cat arquivo)"`).
+
+Secrets já cadastrados no Supabase: `APP_ORIGIN`, `PLANILHA_SYNC_TOKEN`, `NOTIFICAR_TOKEN`, `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`. No Vault: `notificar_url`, `notificar_token`, que ligam os gatilhos de aviso e as tarefas agendadas.
+
+## Decisões de produto (não desfaça sem pedir)
+
+- **Inativação com aprovação**: dispatcher só **solicita** (`solicitar_inativacao_lote`); admin aprova ou recusa (`decidir_grupo_inativacao`) depois de enviar para a Coopmetro e inativar no sistema interno. Admin inativa direto. Reativar é direto para todos.
+- **Várias placas**: cada placa é um cadastro (`codigo`). `pessoa_id` agrupa a mesma pessoa (por CPF; sem CPF, pelo celular). Inativar escolhe quais placas.
+- **Planilha "RELAÇÃO INTERNA ATIVOS E INATIVOS"** (Google Sheets) → app via Apps Script (`docs/apps-script/sincronizar-planilha.gs`) e a Edge Function `sincronizar-planilha`. A aba ATIVOS cadastra novos e atualiza dados, **sem mudar status**. A aba INATIVOS inativa quem ainda está ativo, uma vez por linha, e completa CPF e rotas. O código manda; a placa é só reserva, com desempate por celular e nome, e se continuar empatado não mexe em ninguém.
+- **Avisos**: notificações push do site (Web Push/VAPID) pela função `notificar-movimentacao`. WhatsApp (Z-API) e a aba "MOVIMENTAÇÕES APP" estão no código, mas **desligados** (sem secrets).
+- **Agendamentos (pg_cron)**: lembrete semanal aos dispatchers (segunda 8h) e aviso de pedido parado há mais de 24 h (de hora em hora). Backup semanal no Google Drive pelo Apps Script (domingo 3h).
+- Dispatcher vê só os galpões dele (RLS + `pode_gerir_galpao`). Cadastro público desligado; usuários são criados pelo admin na tela Equipe (`admin-criar-usuario`).
+
+## Publicar
+
+- Banco: `npx supabase db push --linked --yes` (depois da confirmação).
+- Funções: `npx supabase functions deploy <nome> --project-ref idihrzbchxaptjgvsjfu --use-api --no-verify-jwt`. Todas usam `verify_jwt = false`, porque o projeto assina JWT com ES256; a autenticação é feita dentro de cada função.
+- Site: `npx vercel deploy --prod --yes`, ou automático se o repositório estiver ligado à Vercel.
+
+## Documentação
+
+- `docs/TESTES_SEGURANCA.md`: roteiro de testes manuais (desatualizado em relação a pedidos agrupados, várias placas, notificações, painel e relatório).
+- `docs/PLANILHA_SHEETS.md`: integração com a planilha e backup.
+- `docs/NOTIFICACOES.md`: notificações push.
+- `docs/AVISOS_WHATSAPP.md`: Z-API e aba de movimentações (opcional).
