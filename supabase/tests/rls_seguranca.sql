@@ -920,6 +920,57 @@ end;
 $$;
 reset role;
 
+-- =====================================================================
+-- 13. Placa repetida e motorista com duas placas
+-- =====================================================================
+insert into public.motoristas (codigo, nome_completo, celular, placa, galpao, status) values
+  ('TESTE-AMB1', 'Joao Ambiguo',  '21911110001', 'AMB1C23',           'SRJ1', 'ativo'),
+  ('TESTE-AMB2', 'Maria Ambígua', '21911110002', 'AMB1C23',           'SRJ1', 'ativo'),
+  ('TESTE-DUAS', 'Duas Placas',   '21911110003', 'DUA1B11 / DUA2B22', 'SRJ1', 'ativo');
+
+select set_config('request.jwt.claims', '{"role":"service_role"}', true);
+set local role service_role;
+
+do $$
+declare r jsonb;
+begin
+  r := public.buscar_codigos_planilha('[
+    {"linha":1,"placa":"AMB-1C23","celular":"","nome_completo":""},
+    {"linha":2,"placa":"AMB1C23","celular":"(21) 91111-0002","nome_completo":""},
+    {"linha":3,"placa":"AMB1C23","celular":"21999999999","nome_completo":"MARIA AMBIGUA"},
+    {"linha":4,"placa":"DUA2B22","celular":"","nome_completo":""},
+    {"linha":5,"placa":"XXX0X00 / DUA1B11","celular":"","nome_completo":""}
+  ]'::jsonb);
+  if r -> 0 ->> 'situacao' is distinct from 'ambiguo'
+     or r -> 1 ->> 'codigo' is distinct from 'TESTE-AMB2'
+     or r -> 2 ->> 'codigo' is distinct from 'TESTE-AMB2'
+     or r -> 3 ->> 'codigo' is distinct from 'TESTE-DUAS'
+     or r -> 4 ->> 'codigo' is distinct from 'TESTE-DUAS' then
+    raise exception 'FALHOU: desempate de códigos inesperado: %', r;
+  end if;
+  raise notice 'OK: placa repetida desempata por celular e nome; reconhece duas placas';
+
+  -- Aba INATIVOS: empate não inativa ninguém.
+  r := public.sincronizar_inativos_planilha('[{"linha":7,"placa":"AMB1C23","celular":"","nome_completo":"","data":"","motivo":"Outro"}]'::jsonb);
+  if jsonb_array_length(r -> 'ambiguos') <> 1 or (r ->> 'inativados')::int <> 0
+     or exists (select 1 from public.motoristas where codigo in ('TESTE-AMB1', 'TESTE-AMB2') and status = 'inativo') then
+    raise exception 'FALHOU: placa repetida sem desempate inativou alguém: %', r;
+  end if;
+  raise notice 'OK: placa repetida sem desempate não inativa ninguém (vai para "ambiguos")';
+
+  -- Com o celular, inativa só o motorista certo.
+  r := public.sincronizar_inativos_planilha('[{"linha":8,"placa":"AMB1C23","celular":"21911110001","nome_completo":"","data":"","motivo":"Outro"}]'::jsonb);
+  if (r ->> 'inativados')::int <> 1
+     or not exists (select 1 from public.motoristas where codigo = 'TESTE-AMB1' and status = 'inativo')
+     or not exists (select 1 from public.motoristas where codigo = 'TESTE-AMB2' and status = 'ativo') then
+    raise exception 'FALHOU: desempate por celular na aba INATIVOS: %', r;
+  end if;
+  raise notice 'OK: aba INATIVOS inativa só o motorista certo quando a placa é repetida';
+end;
+$$;
+
+reset role;
+
 do $$ begin raise notice '=== TODOS OS TESTES PASSARAM ==='; end $$;
 
 rollback;

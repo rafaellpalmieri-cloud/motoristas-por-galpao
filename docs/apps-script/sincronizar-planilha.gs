@@ -149,15 +149,19 @@ function sincronizarInativos() {
   }
   const linhas = lerLinhas_(aba, pos, ['codigo', 'nome_completo', 'celular', 'placa', 'galpao', 'modal', 'data', 'motivo'])
     .filter(function (l) { return l.codigo || l.placa || l.celular; });
-  const total = { inativados: 0, ja_inativos: 0, ja_processados: 0, nao_encontrados: 0, erros: 0 };
+  const total = { inativados: 0, ja_inativos: 0, ja_processados: 0, nao_encontrados: 0, ambiguos: 0, erros: 0 };
+  const ambiguos = [];
   enviar_('inativos', linhas).forEach(function (r) {
     total.inativados += r.inativados;
     total.ja_inativos += r.ja_inativos;
     total.ja_processados += r.ja_processados;
     total.nao_encontrados += r.qtd_nao_encontrados;
+    total.ambiguos += (r.ambiguos || []).length;
     total.erros += (r.erros || []).length;
+    (r.ambiguos || []).forEach(function (a) { if (ambiguos.length < 50) ambiguos.push(a.linha); });
   });
-  console.log('INATIVOS: ' + JSON.stringify(total));
+  console.log('INATIVOS: ' + JSON.stringify(total) +
+    (ambiguos.length ? '\n  Placa repetida sem desempate (preencha o código): linhas ' + ambiguos.join(', ') : ''));
 }
 
 /** Executado pelo gatilho: primeiro ATIVOS (novos entram), depois INATIVOS. */
@@ -185,11 +189,19 @@ function preencherCodigos() {
 
     const faixaCodigo = aba.getRange(2, pos.codigo + 1, total, 1);
     const codigos = faixaCodigo.getValues();
-    const linhas = lerLinhas_(aba, pos, ['placa', 'celular'])
-      .filter(function (l) { return !String(codigos[l.linha - 2][0]).trim() && (l.placa || l.celular); })
-      .map(function (l) { return { linha: l.linha, placa: l.placa, celular: l.celular }; });
+    const todas = lerLinhas_(aba, pos, ['placa', 'celular', 'nome_completo']);
+    const semCodigo = todas.filter(function (l) { return !String(codigos[l.linha - 2][0]).trim(); });
+    const linhas = semCodigo
+      .filter(function (l) { return l.placa || l.celular; })
+      .map(function (l) { return { linha: l.linha, placa: l.placa, celular: l.celular, nome_completo: l.nome_completo }; });
 
-    const resumo = { preenchidos: 0, nao_encontrados: 0, ambiguos: 0, ja_tinham: total - linhas.length };
+    const resumo = {
+      preenchidos: 0,
+      nao_encontrados: 0,
+      ambiguos: 0,
+      ja_tinham: total - semCodigo.length,
+      sem_placa_e_celular: semCodigo.length - linhas.length,
+    };
     const pendentes = [];
     enviar_('buscar_codigos', linhas).forEach(function (lote) {
       lote.forEach(function (r) {
@@ -198,7 +210,7 @@ function preencherCodigos() {
           resumo.preenchidos++;
         } else {
           resumo[r.situacao === 'ambiguo' ? 'ambiguos' : 'nao_encontrados']++;
-          if (pendentes.length < 50) pendentes.push(r.linha + (r.situacao === 'ambiguo' ? ' (placa repetida)' : ''));
+          if (pendentes.length < 80) pendentes.push(r.linha + (r.situacao === 'ambiguo' ? ' (placa repetida)' : ''));
         }
       });
     });
