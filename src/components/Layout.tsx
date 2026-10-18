@@ -1,7 +1,7 @@
 import { NavLink, Outlet } from 'react-router-dom'
 import { useAuth } from '../auth/AuthProvider'
 import { useContagemAlertas } from '../hooks/motoristas'
-import { usePendentes } from '../hooks/solicitacoes'
+import { agruparPedidos, usePendentes } from '../hooks/solicitacoes'
 import { FaixaNotificacoes } from './AtivarNotificacoes'
 
 function ItemNav({ para, icone, rotulo, selo }: { para: string; icone: string; rotulo: string; selo?: number }) {
@@ -80,7 +80,7 @@ export function Layout() {
             para="/pendencias"
             icone="📝"
             rotulo={ehAdmin ? 'Pendências' : 'Pedidos'}
-            selo={pendentes?.length}
+            selo={pendentes ? agruparPedidos(pendentes).length : undefined}
           />
           {ehAdmin && <ItemNav para="/admin" icone="📊" rotulo="Painel" />}
           {ehAdmin && <ItemNav para="/admin/dispatchers" icone="👥" rotulo="Equipe" />}

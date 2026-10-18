@@ -3,6 +3,7 @@
 App web (pensado para celular) para os dispatchers dos galpões **SRJ1, SRJ2, SRJ4, SRJ5, SRJ8, SRJ9, SRJ10, SRJ13, SRJ17 e HUB** marcarem motoristas como **ativos** ou **inativos**.
 
 - **Dispatcher:** vê só os motoristas dos seus galpões, busca por nome ou placa, liga ou chama no WhatsApp, **solicita a inativação** (com motivo), reativa e vê o histórico.
+- **Motorista com várias placas:** cada placa é um cadastro (código), e o app agrupa os cadastros da mesma pessoa (pelo CPF; sem CPF, pelo celular) num card só. Ao inativar, escolhe-se **quais placas**: todas (o motorista inteiro) ou só uma. O pedido vai agrupado e o admin aprova ou recusa de uma vez.
 - **Inativação com aprovação:** o pedido do dispatcher aparece em **Pendências** para o admin. O motorista só fica inativo quando o admin **aprova**, depois de enviar para a Coopmetro e inativar no sistema interno. O admin também pode recusar, com resposta.
 - **Admin:** tudo isso e mais painel por galpão, gestão da equipe, importação e exportação de CSV, e motoristas sem galpão.
 - **Alertas de inativação:** o sino 🔔 no topo mostra quantos motoristas outras pessoas inativaram desde a sua última visita. A tela **Alertas** lista as inativações dos últimos 30 dias, com quem fez, quando, o motivo e o galpão. Na lista, inativações recentes ganham o selo **Novo**. Cada um só vê alertas dos próprios galpões.

@@ -1,16 +1,15 @@
 import { useState, type ReactNode } from 'react'
-import { useLocation, useNavigate, useParams } from 'react-router-dom'
-import { ModalStatus } from '../components/ModalStatus'
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
+import { ModalStatus, type AlvoStatus } from '../components/ModalStatus'
 import { BadgeStatus, Botao, Carregando, Cartao, EstadoErro, EstadoVazio, Pagina, SeloPlanilha } from '../components/ui'
 import { CartaoSolicitacao } from '../components/CartaoSolicitacao'
 import { useAuth } from '../auth/AuthProvider'
-import { useCpfCompleto, useHistorico, useMotorista } from '../hooks/motoristas'
+import { useCpfCompleto, useHistorico, useMotorista, useMotoristas } from '../hooks/motoristas'
 import { useSolicitacoesDoMotorista } from '../hooks/solicitacoes'
 import { formatarData, formatarDataHora } from '../lib/datas'
 import { mensagemErro } from '../lib/erros'
 import { formatarCpf } from '../lib/rotas'
 import { formatarCelular, linkTelefone, linkWhatsApp } from '../lib/telefone'
-import type { Motorista } from '../lib/tipos'
 
 function Linha({ rotulo, children }: { rotulo: string; children: ReactNode }) {
   return (
@@ -30,7 +29,8 @@ export default function MotoristaDetalhe() {
   const solicitacoes = useSolicitacoesDoMotorista(id)
   const { ehAdmin } = useAuth()
   const cpfCompleto = useCpfCompleto(id, ehAdmin)
-  const [selecionado, setSelecionado] = useState<Motorista | null>(null)
+  const [alvo, setAlvo] = useState<AlvoStatus | null>(null)
+  const { data: todos } = useMotoristas()
 
   const voltar = (
     <button
@@ -58,6 +58,7 @@ export default function MotoristaDetalhe() {
       </Pagina>
     )
 
+  const outrasPlacas = (todos ?? []).filter((p) => p.pessoa_id && p.pessoa_id === m.pessoa_id && p.id !== m.id)
   const pedidoPendente = solicitacoes.data?.find((s) => s.status === 'pendente')
   const ultimosPedidos = (solicitacoes.data ?? []).filter((s) => s.status !== 'pendente').slice(0, 5)
   const tel = linkTelefone(m.celular)
@@ -100,16 +101,35 @@ export default function MotoristaDetalhe() {
             </a>
           )}
           {!(pedidoPendente && m.status === 'ativo') && (
-            <Botao variante={m.status === 'ativo' ? 'perigo' : 'sucesso'} className="col-span-2" onClick={() => setSelecionado(m)}>
+            <Botao variante={m.status === 'ativo' ? 'perigo' : 'sucesso'} className="col-span-2" onClick={() => setAlvo({ acao: m.status === 'ativo' ? 'inativar' : 'reativar', motoristas: [m] })}>
               {m.status === 'ativo' ? 'Inativar' : 'Reativar'}
             </Botao>
           )}
         </div>
       </Cartao>
 
+      {outrasPlacas.length > 0 && (
+        <div className="mb-4 rounded-2xl border border-slate-200 bg-white p-4">
+          <p className="mb-2 font-semibold text-slate-800">Outras placas deste motorista</p>
+          <ul className="flex flex-col gap-2">
+            {outrasPlacas.map((p) => (
+              <li key={p.id}>
+                <Link to={`/motoristas/${p.id}`} className="flex min-h-11 items-center justify-between gap-2 rounded-xl border border-slate-200 px-3">
+                  <span className="text-sm">
+                    <strong>{p.placa ?? 'sem placa'}</strong>
+                    {[p.modal, p.galpao, p.codigo].filter(Boolean).map((t) => ` · ${t}`).join('')}
+                  </span>
+                  <BadgeStatus status={p.status} />
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       {pedidoPendente && m.status === 'ativo' && (
         <div className="mb-4">
-          <CartaoSolicitacao s={pedidoPendente} mostrarMotorista={false} />
+          <CartaoSolicitacao itens={[pedidoPendente]} mostrarMotorista={false} />
         </div>
       )}
 
@@ -120,7 +140,7 @@ export default function MotoristaDetalhe() {
           </summary>
           <div className="flex flex-col gap-2 px-3 pb-3">
             {ultimosPedidos.map((s) => (
-              <CartaoSolicitacao key={s.id} s={s} mostrarMotorista={false} />
+              <CartaoSolicitacao key={s.id} itens={[s]} mostrarMotorista={false} />
             ))}
           </div>
         </details>
@@ -154,7 +174,7 @@ export default function MotoristaDetalhe() {
         </ol>
       )}
 
-      <ModalStatus motorista={selecionado} aoFechar={() => setSelecionado(null)} />
+      <ModalStatus alvo={alvo} aoFechar={() => setAlvo(null)} />
     </Pagina>
   )
 }

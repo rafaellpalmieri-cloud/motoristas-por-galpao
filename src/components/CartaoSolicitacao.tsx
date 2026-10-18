@@ -21,14 +21,21 @@ export function SeloSolicitacao({ status }: { status: StatusSolicitacao }) {
   return <span className={`rounded-full px-2 py-0.5 text-xs font-bold uppercase ${cor}`}>{rotulo}</span>
 }
 
-/** Pedido de inativação com as ações permitidas para quem está vendo. */
-export function CartaoSolicitacao({ s, mostrarMotorista = true }: { s: Solicitacao; mostrarMotorista?: boolean }) {
+/**
+ * Pedido de inativação (uma ou várias placas do mesmo motorista, mesmo grupo)
+ * com as ações permitidas para quem está vendo.
+ */
+export function CartaoSolicitacao({ itens, mostrarMotorista = true }: { itens: Solicitacao[]; mostrarMotorista?: boolean }) {
   const { ehAdmin, session } = useAuth()
   const [modal, setModal] = useState<'aprovar' | 'recusar' | 'cancelar' | null>(null)
-  const pendente = s.status === 'pendente'
+  const s = itens[0]
+  const pendentes = itens.filter((i) => i.status === 'pendente')
+  const pendente = pendentes.length > 0
   const podeCancelar = pendente && (ehAdmin || s.solicitado_por === session?.user.id)
   const nome = s.motoristas?.nome_completo || s.motoristas?.codigo || 'Motorista'
   const wa = linkWhatsApp(s.motoristas?.celular ?? null)
+  const varias = itens.length > 1
+  const placas = itens.map((i) => i.motoristas?.placa ?? i.motoristas?.codigo ?? '?')
 
   return (
     <div className={`rounded-2xl border p-4 ${pendente ? 'border-amber-300 bg-amber-50/60' : 'border-slate-200 bg-white'}`}>
@@ -36,20 +43,36 @@ export function CartaoSolicitacao({ s, mostrarMotorista = true }: { s: Solicitac
         {mostrarMotorista ? (
           <Link to={`/motoristas/${s.motorista_id}`} className="min-w-0 font-semibold text-slate-900">
             {nome}
-            {s.motoristas?.placa ? <span className="font-normal text-slate-500"> · {s.motoristas.placa}</span> : null}
+            <span className="font-normal text-slate-500"> · {varias ? `${itens.length} placas` : placas[0]}</span>
           </Link>
         ) : (
-          <p className="font-semibold text-slate-900">Pedido de inativação</p>
+          <p className="font-semibold text-slate-900">Pedido de inativação{varias ? ` (${itens.length} placas)` : ''}</p>
         )}
-        <SeloSolicitacao status={s.status} />
+        <SeloSolicitacao status={pendente ? 'pendente' : s.status} />
       </div>
 
-      <p className="mt-1 text-rose-700">
+      {varias && (
+        <ul className="mt-2 flex flex-wrap gap-1">
+          {itens.map((i) => (
+            <li key={i.id}>
+              <Link
+                to={`/motoristas/${i.motorista_id}`}
+                className="inline-flex min-h-9 items-center gap-1 rounded-lg border border-slate-300 bg-white px-2 text-sm font-semibold"
+              >
+                {i.motoristas?.placa ?? i.motoristas?.codigo}
+                {i.status !== 'pendente' && <span className="text-xs font-normal text-slate-500">({ROTULOS[i.status][0]})</span>}
+              </Link>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      <p className="mt-2 text-rose-700">
         {s.motivo}
         {s.galpao ? ` · ${s.galpao}` : ''}
       </p>
       {s.observacao && <p className="mt-1 text-sm text-slate-600">“{s.observacao}”</p>}
-      <p className="mt-2 text-sm text-slate-500" title={formatarDataHora(s.solicitado_em)}>
+      <p className="mt-2 text-sm text-slate-500">
         Pedido por {s.solicitado_por_nome ?? 'usuário removido'} · {formatarDataHora(s.solicitado_em)} (
         {tempoRelativo(s.solicitado_em)})
       </p>
@@ -95,7 +118,16 @@ export function CartaoSolicitacao({ s, mostrarMotorista = true }: { s: Solicitac
         titulo={modal === 'aprovar' ? 'Aprovar inativação' : modal === 'recusar' ? 'Recusar pedido' : 'Cancelar pedido'}
         aoFechar={() => setModal(null)}
       >
-        {modal && <Decisao key={modal} s={s} nome={nome} acao={modal} aoFechar={() => setModal(null)} />}
+        {modal && (
+          <Decisao
+            key={modal}
+            s={pendentes[0] ?? s}
+            nome={nome}
+            placas={pendentes.map((i) => i.motoristas?.placa ?? i.motoristas?.codigo ?? '?')}
+            acao={modal}
+            aoFechar={() => setModal(null)}
+          />
+        )}
       </Modal>
     </div>
   )
@@ -104,11 +136,13 @@ export function CartaoSolicitacao({ s, mostrarMotorista = true }: { s: Solicitac
 function Decisao({
   s,
   nome,
+  placas,
   acao,
   aoFechar,
 }: {
   s: Solicitacao
   nome: string
+  placas: string[]
   acao: 'aprovar' | 'recusar' | 'cancelar'
   aoFechar: () => void
 }) {
@@ -119,6 +153,7 @@ function Decisao({
   const cancelar = useCancelarSolicitacao()
   const toast = useToast()
   const carregando = decidir.isPending || cancelar.isPending
+  const qual = placas.length > 1 ? `as ${placas.length} placas (${placas.join(', ')})` : `a placa ${placas[0]}`
 
   function confirmar() {
     if (acao === 'aprovar' && !confirmado) return setErro('Confirme que já fez a baixa na Coopmetro e no sistema interno.')
@@ -127,15 +162,15 @@ function Decisao({
     const opcoes = {
       onSuccess: () => {
         toast(
-          acao === 'aprovar' ? `${nome} foi inativado.` : acao === 'recusar' ? 'Pedido recusado.' : 'Pedido cancelado.',
+          acao === 'aprovar' ? `${nome}: inativado(s).` : acao === 'recusar' ? 'Pedido recusado.' : 'Pedido cancelado.',
           'sucesso',
         )
         aoFechar()
       },
       onError: (e: unknown) => setErro(mensagemErro(e)),
     }
-    if (acao === 'cancelar') cancelar.mutate(s.id, opcoes)
-    else decidir.mutate({ id: s.id, aprovar: acao === 'aprovar', resposta: resposta.trim() || undefined }, opcoes)
+    if (acao === 'cancelar') cancelar.mutate(s, opcoes)
+    else decidir.mutate({ s, aprovar: acao === 'aprovar', resposta: resposta.trim() || undefined }, opcoes)
   }
 
   return (
@@ -143,7 +178,8 @@ function Decisao({
       <p className="text-slate-700">
         {acao === 'aprovar' && (
           <>
-            <strong>{nome}</strong> será marcado como <strong>inativo</strong> (motivo: {s.motivo}).
+            <strong>{nome}</strong>: {qual} {placas.length > 1 ? 'ficarão' : 'ficará'} <strong>inativa(s)</strong> (motivo:{' '}
+            {s.motivo}).
           </>
         )}
         {acao === 'recusar' && (
@@ -153,7 +189,7 @@ function Decisao({
         )}
         {acao === 'cancelar' && (
           <>
-            O pedido de inativação de <strong>{nome}</strong> será cancelado.
+            O pedido de inativação de <strong>{nome}</strong> ({qual}) será cancelado.
           </>
         )}
       </p>

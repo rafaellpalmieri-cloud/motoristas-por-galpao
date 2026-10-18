@@ -16,6 +16,8 @@ export interface Motorista {
   atualizado_por: string | null
   /** CPF mascarado (***.456.789-**). O completo só via cpf_completo (admin). */
   cpf_mascarado: string | null
+  /** Agrupa os cadastros (placas) da mesma pessoa. */
+  pessoa_id: string | null
   realizou_rotas: boolean | null
   qtd_rotas: number | null
   ultima_rota: string | null
@@ -51,6 +53,7 @@ export interface Solicitacao {
   decidido_por_nome: string | null
   decidido_em: string | null
   resposta: string | null
+  grupo: string | null
   motoristas?: { nome_completo: string | null; placa: string | null; codigo: string; celular: string | null } | null
 }
 

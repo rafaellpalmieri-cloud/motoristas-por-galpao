@@ -1061,6 +1061,114 @@ begin
 end;
 $$;
 
+-- =====================================================================
+-- 15. Mesma pessoa com várias placas; pedidos e ações em lote
+-- =====================================================================
+insert into public.motoristas (id, codigo, nome_completo, celular, placa, galpao, status, cpf) values
+  ('20000000-0000-4000-a000-000000000001', 'TESTE-P1A', 'Pessoa Duas Placas', '21922220001', 'PES1A11', 'SRJ1', 'ativo', '11122233344'),
+  ('20000000-0000-4000-a000-000000000002', 'TESTE-P1B', 'Pessoa Duas Placas', '21922220001', 'PES1B22', 'SRJ1', 'ativo', '11122233344'),
+  ('20000000-0000-4000-a000-000000000003', 'TESTE-FAM', 'Parente Mesmo Celular', '21922220001', 'FAM1C33', 'SRJ1', 'ativo', '99988877766'),
+  ('20000000-0000-4000-a000-000000000004', 'TESTE-SEMCPF', 'Sem Cpf', '21922229999', 'SEM1D44', 'SRJ1', 'ativo', null),
+  ('20000000-0000-4000-a000-000000000005', 'TESTE-SEMCPF2', 'Sem Cpf', '(21) 92222-9999', 'SEM1E55', 'SRJ1', 'ativo', null);
+
+do $$
+begin
+  if (select count(distinct pessoa_id) from public.motoristas where codigo in ('TESTE-P1A', 'TESTE-P1B')) <> 1 then
+    raise exception 'FALHOU: mesmo CPF não agrupou as placas';
+  end if;
+  if (select pessoa_id from public.motoristas where codigo = 'TESTE-FAM')
+     = (select pessoa_id from public.motoristas where codigo = 'TESTE-P1A') then
+    raise exception 'FALHOU: CPF diferente com mesmo celular foi agrupado';
+  end if;
+  if (select count(distinct pessoa_id) from public.motoristas where codigo in ('TESTE-SEMCPF', 'TESTE-SEMCPF2')) <> 1 then
+    raise exception 'FALHOU: sem CPF, mesmo celular não agrupou';
+  end if;
+  raise notice 'OK: agrupa por CPF; sem CPF, por celular; CPF diferente não junta';
+end;
+$$;
+
+select set_config('request.jwt.claims', '{"sub":"00000000-0000-4000-a000-000000000002","role":"authenticated"}', true);
+set local role authenticated;
+
+do $$
+declare v_grupo uuid;
+begin
+  -- Dispatcher pede só UMA placa: a outra placa da mesma pessoa continua sem pedido.
+  v_grupo := public.solicitar_inativacao_lote(array['20000000-0000-4000-a000-000000000001']::uuid[], 'Documentação', null);
+  if exists (select 1 from public.solicitacoes_inativacao
+             where motorista_id = '20000000-0000-4000-a000-000000000002' and status = 'pendente') then
+    raise exception 'FALHOU: pedido de uma placa abriu pedido para a outra';
+  end if;
+  perform public.cancelar_grupo_inativacao(v_grupo);
+  raise notice 'OK: dispatcher pede e cancela a inativação de só uma placa';
+
+  -- Pedido do motorista inteiro (duas placas) num grupo só.
+  v_grupo := public.solicitar_inativacao_lote(
+    array['20000000-0000-4000-a000-000000000001', '20000000-0000-4000-a000-000000000002']::uuid[], 'Parou de rodar', null);
+  if (select count(*) from public.solicitacoes_inativacao where grupo = v_grupo and status = 'pendente') <> 2 then
+    raise exception 'FALHOU: pedido do motorista inteiro não criou as duas placas';
+  end if;
+  raise notice 'OK: pedido do motorista inteiro agrupa todas as placas';
+
+  -- Lote com placa de outro galpão falha inteiro (nada é criado).
+  begin
+    perform public.solicitar_inativacao_lote(
+      array['20000000-0000-4000-a000-000000000003', '10000000-0000-4000-a000-000000000002']::uuid[], 'Parou de rodar', null);
+    raise exception 'FALHOU: lote com placa de outro galpão foi aceito';
+  exception when insufficient_privilege then null;
+  end;
+  if exists (select 1 from public.solicitacoes_inativacao
+             where motorista_id = '20000000-0000-4000-a000-000000000003' and status = 'pendente') then
+    raise exception 'FALHOU: lote rejeitado deixou pedido pela metade';
+  end if;
+  raise notice 'OK: lote com placa de outro galpão é recusado por inteiro';
+
+  begin
+    perform public.decidir_grupo_inativacao(v_grupo, true, null);
+    raise exception 'FALHOU: dispatcher aprovou grupo';
+  exception when insufficient_privilege then raise notice 'OK: dispatcher não aprova pedido em grupo';
+  end;
+
+  begin
+    perform public.alterar_status_lote(array['20000000-0000-4000-a000-000000000004']::uuid[], 'inativo', 'Outro', 'x');
+    raise exception 'FALHOU: dispatcher inativou direto em lote';
+  exception when insufficient_privilege then raise notice 'OK: dispatcher não inativa direto em lote';
+  end;
+end;
+$$;
+
+reset role;
+select set_config('request.jwt.claims', '{"sub":"00000000-0000-4000-a000-000000000001","role":"authenticated"}', true);
+set local role authenticated;
+
+do $$
+declare v_grupo uuid; n integer;
+begin
+  select grupo into v_grupo from public.solicitacoes_inativacao
+  where motorista_id = '20000000-0000-4000-a000-000000000001' and status = 'pendente';
+  n := public.decidir_grupo_inativacao(v_grupo, true, 'Enviado à Coopmetro');
+  if n <> 2 or (select count(*) from public.motoristas where codigo in ('TESTE-P1A', 'TESTE-P1B') and status = 'inativo') <> 2 then
+    raise exception 'FALHOU: aprovação em grupo não inativou as duas placas';
+  end if;
+  raise notice 'OK: admin aprova o pedido em grupo (todas as placas)';
+
+  -- Admin inativa só uma placa direto e reativa em lote.
+  perform public.alterar_status_lote(array['20000000-0000-4000-a000-000000000004']::uuid[], 'inativo', 'Documentação', null);
+  if not exists (select 1 from public.motoristas where codigo = 'TESTE-SEMCPF' and status = 'inativo')
+     or not exists (select 1 from public.motoristas where codigo = 'TESTE-SEMCPF2' and status = 'ativo') then
+    raise exception 'FALHOU: inativar uma placa afetou a outra';
+  end if;
+  perform public.alterar_status_lote(
+    array['20000000-0000-4000-a000-000000000001', '20000000-0000-4000-a000-000000000002']::uuid[], 'ativo', null, null);
+  if (select count(*) from public.motoristas where codigo in ('TESTE-P1A', 'TESTE-P1B') and status = 'ativo') <> 2 then
+    raise exception 'FALHOU: reativação em lote';
+  end if;
+  raise notice 'OK: admin inativa só uma placa e reativa em lote';
+end;
+$$;
+
+reset role;
+
 do $$ begin raise notice '=== TODOS OS TESTES PASSARAM ==='; end $$;
 
 rollback;

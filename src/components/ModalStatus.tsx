@@ -8,47 +8,56 @@ import type { Motorista } from '../lib/tipos'
 import { useToast } from './Toast'
 import { Botao, Modal } from './ui'
 
+export interface AlvoStatus {
+  acao: 'inativar' | 'reativar'
+  /** Placas (cadastros) que podem ser escolhidas; todas vêm marcadas. */
+  motoristas: Motorista[]
+}
+
 /**
- * Confirmação de inativação (com motivo) ou reativação.
- * Dispatcher não inativa direto: envia uma solicitação que o admin aprova.
+ * Inativar (com motivo) ou reativar uma ou mais placas do mesmo motorista.
+ * Dispatcher não inativa direto: envia um pedido que o admin aprova.
  */
-export function ModalStatus({ motorista, aoFechar }: { motorista: Motorista | null; aoFechar: () => void }) {
+export function ModalStatus({ alvo, aoFechar }: { alvo: AlvoStatus | null; aoFechar: () => void }) {
   const { ehAdmin } = useAuth()
-  const titulo =
-    motorista?.status !== 'ativo' ? 'Reativar motorista' : ehAdmin ? 'Inativar motorista' : 'Solicitar inativação'
+  const titulo = alvo?.acao === 'reativar' ? 'Reativar' : ehAdmin ? 'Inativar' : 'Solicitar inativação'
   return (
-    <Modal
-      aberto={!!motorista}
-      titulo={titulo}
-      aoFechar={aoFechar}
-    >
-      {motorista && <Conteudo key={motorista.id} motorista={motorista} aoFechar={aoFechar} />}
+    <Modal aberto={!!alvo} titulo={titulo} aoFechar={aoFechar}>
+      {alvo && <Conteudo key={alvo.motoristas.map((m) => m.id).join()} alvo={alvo} aoFechar={aoFechar} />}
     </Modal>
   )
 }
 
-function Conteudo({ motorista, aoFechar }: { motorista: Motorista; aoFechar: () => void }) {
+function Conteudo({ alvo, aoFechar }: { alvo: AlvoStatus; aoFechar: () => void }) {
   const { ehAdmin } = useAuth()
-  const inativar = motorista.status === 'ativo'
+  const inativar = alvo.acao === 'inativar'
   const solicitar = inativar && !ehAdmin
+  const [marcados, setMarcados] = useState<string[]>(alvo.motoristas.map((m) => m.id))
   const [motivo, setMotivo] = useState('')
   const [observacao, setObservacao] = useState('')
   const [erro, setErro] = useState<string | null>(null)
   const alterar = useAlterarStatus()
   const pedir = useSolicitar()
   const toast = useToast()
-  const nome = motorista.nome_completo || motorista.codigo
+
+  const varias = alvo.motoristas.length > 1
+  const escolhidos = alvo.motoristas.filter((m) => marcados.includes(m.id))
+  const nome = alvo.motoristas[0].nome_completo || alvo.motoristas[0].codigo
+  const todas = escolhidos.length === alvo.motoristas.length
+  const resumo = varias ? (todas ? 'todas as placas' : `${escolhidos.length} placa(s)`) : (alvo.motoristas[0].placa ?? 'placa')
 
   function confirmar() {
+    if (!escolhidos.length) return setErro('Escolha ao menos uma placa.')
     if (inativar && !motivo) return setErro('Escolha o motivo.')
     if (inativar && motivo === 'Outro' && !observacao.trim()) return setErro('Descreva o motivo na observação.')
     setErro(null)
     aoFechar()
+    const obs = observacao.trim() || undefined
     if (solicitar) {
       pedir.mutate(
-        { motoristaId: motorista.id, motivo, observacao: observacao.trim() || undefined },
+        { motoristaIds: escolhidos.map((m) => m.id), motivo, observacao: obs },
         {
-          onSuccess: () => toast(`Solicitação enviada. ${nome} continua ativo até a aprovação.`, 'sucesso'),
+          onSuccess: () => toast(`Pedido enviado (${nome}, ${resumo}). Continua ativo até a aprovação.`, 'sucesso'),
           onError: (e) => toast(`Não foi possível solicitar: ${mensagemErro(e)}`, 'erro'),
         },
       )
@@ -56,13 +65,13 @@ function Conteudo({ motorista, aoFechar }: { motorista: Motorista; aoFechar: () 
     }
     alterar.mutate(
       {
-        motorista,
+        motoristas: escolhidos,
         novoStatus: inativar ? 'inativo' : 'ativo',
         motivo: inativar ? motivo : undefined,
-        observacao: observacao.trim() || undefined,
+        observacao: obs,
       },
       {
-        onSuccess: () => toast(inativar ? `${nome} foi inativado.` : `${nome} foi reativado.`, 'sucesso'),
+        onSuccess: () => toast(`${nome}: ${resumo} ${inativar ? 'inativada(s)' : 'reativada(s)'}.`, 'sucesso'),
         onError: (e) => toast(`Não foi possível salvar: ${mensagemErro(e)}`, 'erro'),
       },
     )
@@ -71,15 +80,44 @@ function Conteudo({ motorista, aoFechar }: { motorista: Motorista; aoFechar: () 
   return (
     <div className="flex flex-col gap-4">
       <p className="text-slate-700">
-        {solicitar ? 'Solicitar a inativação de ' : inativar ? 'Confirma a inativação de ' : 'Confirma a reativação de '}
         <strong>{nome}</strong>
-        {motorista.placa ? ` (${motorista.placa})` : ''}?
+        {varias
+          ? inativar
+            ? ' — marque as placas que vão sair. Deixe todas marcadas para inativar o motorista inteiro.'
+            : ' — marque as placas que vão voltar a rodar.'
+          : alvo.motoristas[0].placa
+            ? ` (${alvo.motoristas[0].placa})`
+            : ''}
       </p>
+
+      {varias && (
+        <fieldset className="flex flex-col gap-2">
+          <legend className="mb-1 text-sm font-medium text-slate-700">Placas</legend>
+          {alvo.motoristas.map((m) => {
+            const marcado = marcados.includes(m.id)
+            return (
+              <label
+                key={m.id}
+                className={`flex min-h-11 cursor-pointer items-center gap-3 rounded-xl border px-3 ${marcado ? 'border-sky-600 bg-sky-50' : 'border-slate-300'}`}
+              >
+                <input
+                  type="checkbox"
+                  checked={marcado}
+                  onChange={() => setMarcados((atual) => (marcado ? atual.filter((x) => x !== m.id) : [...atual, m.id]))}
+                  className="h-5 w-5 accent-sky-700"
+                />
+                <span className="font-semibold">{m.placa ?? 'sem placa'}</span>
+                <span className="text-sm text-slate-500">{[m.modal, m.galpao, m.codigo].filter(Boolean).join(' · ')}</span>
+              </label>
+            )
+          })}
+        </fieldset>
+      )}
 
       {solicitar && (
         <p className="rounded-xl bg-amber-50 p-3 text-sm text-amber-900">
-          A equipe vai receber o pedido. O motorista só fica inativo depois que ela aprovar (envio para a Coopmetro e
-          baixa no sistema interno).
+          A equipe vai receber o pedido. As placas só ficam inativas depois que ela aprovar (envio para a Coopmetro e baixa
+          no sistema interno).
         </p>
       )}
 
@@ -116,7 +154,7 @@ function Conteudo({ motorista, aoFechar }: { motorista: Motorista; aoFechar: () 
           value={observacao}
           onChange={(e) => setObservacao(e.target.value)}
           className="rounded-xl border border-slate-300 px-3 py-2 text-base focus:border-sky-600 focus:outline-none focus:ring-2 focus:ring-sky-200"
-          placeholder={inativar ? 'Ex.: avisou que vai parar por 2 semanas' : 'Ex.: voltou a rodar'}
+          placeholder={inativar ? 'Ex.: vendeu o carro; continua rodando de moto' : 'Ex.: voltou a rodar'}
         />
       </div>
 

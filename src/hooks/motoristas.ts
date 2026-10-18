@@ -6,7 +6,7 @@ import { supabase } from '../lib/supabase'
 import type { Historico, Motorista, Status } from '../lib/tipos'
 
 const CAMPOS_MOTORISTA =
-  'id, codigo, nome_completo, celular, placa, modal, galpao, status, inativo_desde, motivo_inativacao, atualizado_em, atualizado_por, cpf_mascarado, realizou_rotas, qtd_rotas, ultima_rota'
+  'id, codigo, nome_completo, celular, placa, modal, galpao, status, inativo_desde, motivo_inativacao, atualizado_em, atualizado_por, cpf_mascarado, pessoa_id, realizou_rotas, qtd_rotas, ultima_rota'
 
 // A RLS já limita aos galpões do usuário; aqui só buscamos tudo o que ele pode ver.
 export function useMotoristas() {
@@ -58,55 +58,57 @@ export function useHistorico(motoristaId: string | undefined) {
 }
 
 export interface DadosAlteracao {
-  motorista: Motorista
+  motoristas: Motorista[]
   novoStatus: Status
   motivo?: string
   observacao?: string
 }
 
-/** Inativa/reativa com atualização otimista e desfaz em caso de erro. */
+/** Inativa (admin) ou reativa uma ou mais placas, com atualização otimista e desfaz em caso de erro. */
 export function useAlterarStatus() {
   const queryClient = useQueryClient()
   const { session } = useAuth()
 
   return useMutation({
-    mutationFn: async ({ motorista, novoStatus, motivo, observacao }: DadosAlteracao) => {
-      const { error } = await supabase.rpc('alterar_status_motorista', {
-        p_motorista_id: motorista.id,
+    mutationFn: async ({ motoristas, novoStatus, motivo, observacao }: DadosAlteracao) => {
+      const { error } = await supabase.rpc('alterar_status_lote', {
+        p_motorista_ids: motoristas.map((m) => m.id),
         p_novo_status: novoStatus,
         p_motivo: motivo ?? null,
         p_observacao: observacao ?? null,
       })
       if (error) throw error
     },
-    onMutate: async ({ motorista, novoStatus, motivo }) => {
+    onMutate: async ({ motoristas, novoStatus, motivo }) => {
       await queryClient.cancelQueries({ queryKey: ['motoristas'] })
-      await queryClient.cancelQueries({ queryKey: ['motorista', motorista.id] })
+      const ids = new Set(motoristas.map((m) => m.id))
       const anteriorLista = queryClient.getQueryData<Motorista[]>(['motoristas'])
-      const anteriorItem = queryClient.getQueryData<Motorista | null>(['motorista', motorista.id])
+      const anteriores = motoristas.map((m) => [m.id, queryClient.getQueryData<Motorista | null>(['motorista', m.id])] as const)
 
-      const otimista: Motorista = {
-        ...motorista,
+      const hoje = new Date().toLocaleDateString('sv-SE', { timeZone: 'America/Sao_Paulo' })
+      const aplicar = (m: Motorista): Motorista => ({
+        ...m,
         status: novoStatus,
-        inativo_desde: novoStatus === 'inativo' ? new Date().toLocaleDateString('sv-SE', { timeZone: 'America/Sao_Paulo' }) : null,
+        inativo_desde: novoStatus === 'inativo' ? hoje : null,
         motivo_inativacao: novoStatus === 'inativo' ? (motivo ?? null) : null,
         atualizado_em: new Date().toISOString(),
         atualizado_por: session?.user.id ?? null,
-      }
-      queryClient.setQueryData<Motorista[]>(['motoristas'], (lista) =>
-        lista?.map((m) => (m.id === motorista.id ? otimista : m)),
-      )
-      queryClient.setQueryData(['motorista', motorista.id], otimista)
-      return { anteriorLista, anteriorItem }
+      })
+      queryClient.setQueryData<Motorista[]>(['motoristas'], (lista) => lista?.map((m) => (ids.has(m.id) ? aplicar(m) : m)))
+      for (const m of motoristas) queryClient.setQueryData(['motorista', m.id], aplicar(m))
+      return { anteriorLista, anteriores }
     },
-    onError: (_erro, { motorista }, ctx) => {
+    onError: (_erro, _vars, ctx) => {
       if (ctx?.anteriorLista) queryClient.setQueryData(['motoristas'], ctx.anteriorLista)
-      if (ctx?.anteriorItem !== undefined) queryClient.setQueryData(['motorista', motorista.id], ctx.anteriorItem)
+      for (const [id, item] of ctx?.anteriores ?? []) if (item !== undefined) queryClient.setQueryData(['motorista', id], item)
     },
-    onSettled: (_d, _e, { motorista }) => {
+    onSettled: (_d, _e, { motoristas }) => {
       queryClient.invalidateQueries({ queryKey: ['motoristas'] })
-      queryClient.invalidateQueries({ queryKey: ['motorista', motorista.id] })
-      queryClient.invalidateQueries({ queryKey: ['historico', motorista.id] })
+      for (const m of motoristas) {
+        queryClient.invalidateQueries({ queryKey: ['motorista', m.id] })
+        queryClient.invalidateQueries({ queryKey: ['historico', m.id] })
+      }
+      queryClient.invalidateQueries({ queryKey: ['solicitacoes'] })
       queryClient.invalidateQueries({ queryKey: ['alertas'] })
       queryClient.invalidateQueries({ queryKey: ['resumo'] })
     },

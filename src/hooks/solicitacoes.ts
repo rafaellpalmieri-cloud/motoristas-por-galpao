@@ -67,44 +67,64 @@ export function useSolicitacoesDoMotorista(motoristaId: string | undefined) {
   })
 }
 
+/** Pede a inativação de uma ou mais placas (um pedido agrupado). */
 export function useSolicitar() {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: async (v: { motoristaId: string; motivo: string; observacao?: string }) => {
-      const { data, error } = await supabase.rpc('solicitar_inativacao', {
-        p_motorista_id: v.motoristaId,
+    mutationFn: async (v: { motoristaIds: string[]; motivo: string; observacao?: string }) => {
+      const { error } = await supabase.rpc('solicitar_inativacao_lote', {
+        p_motorista_ids: v.motoristaIds,
         p_motivo: v.motivo,
         p_observacao: v.observacao ?? null,
       })
       if (error) throw error
-      return data as Solicitacao
     },
     onSettled: () => invalidarTudo(queryClient),
   })
 }
 
+/** Cancela um pedido (todas as placas pendentes do grupo, ou o pedido avulso). */
 export function useCancelarSolicitacao() {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: async (id: number) => {
-      const { error } = await supabase.rpc('cancelar_solicitacao_inativacao', { p_solicitacao_id: id })
+    mutationFn: async (s: Pick<Solicitacao, 'id' | 'grupo'>) => {
+      const { error } = s.grupo
+        ? await supabase.rpc('cancelar_grupo_inativacao', { p_grupo: s.grupo })
+        : await supabase.rpc('cancelar_solicitacao_inativacao', { p_solicitacao_id: s.id })
       if (error) throw error
     },
     onSettled: () => invalidarTudo(queryClient),
   })
 }
 
+/** Aprova ou recusa um pedido (todas as placas pendentes do grupo, ou o pedido avulso). */
 export function useDecidirSolicitacao() {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: async (v: { id: number; aprovar: boolean; resposta?: string }) => {
-      const { error } = await supabase.rpc('decidir_solicitacao_inativacao', {
-        p_solicitacao_id: v.id,
-        p_aprovar: v.aprovar,
-        p_resposta: v.resposta ?? null,
-      })
+    mutationFn: async (v: { s: Pick<Solicitacao, 'id' | 'grupo'>; aprovar: boolean; resposta?: string }) => {
+      const { error } = v.s.grupo
+        ? await supabase.rpc('decidir_grupo_inativacao', {
+            p_grupo: v.s.grupo,
+            p_aprovar: v.aprovar,
+            p_resposta: v.resposta ?? null,
+          })
+        : await supabase.rpc('decidir_solicitacao_inativacao', {
+            p_solicitacao_id: v.s.id,
+            p_aprovar: v.aprovar,
+            p_resposta: v.resposta ?? null,
+          })
       if (error) throw error
     },
     onSettled: () => invalidarTudo(queryClient),
   })
+}
+
+/** Junta pedidos do mesmo grupo (mesmo motorista, várias placas). */
+export function agruparPedidos(lista: Solicitacao[]): Solicitacao[][] {
+  const grupos = new Map<string, Solicitacao[]>()
+  for (const s of lista) {
+    const chave = s.grupo ?? `avulso-${s.id}`
+    grupos.set(chave, [...(grupos.get(chave) ?? []), s])
+  }
+  return [...grupos.values()]
 }

@@ -1,8 +1,8 @@
 import { useDeferredValue, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useAuth } from '../auth/AuthProvider'
-import { CardMotorista } from '../components/CardMotorista'
-import { ModalStatus } from '../components/ModalStatus'
+import { CardPessoa } from '../components/CardPessoa'
+import { ModalStatus, type AlvoStatus } from '../components/ModalStatus'
 import { Carregando, EstadoErro, EstadoVazio, Pagina } from '../components/ui'
 import { useCpfsCompletos, useMotoristas } from '../hooks/motoristas'
 import { usePendentes } from '../hooks/solicitacoes'
@@ -25,7 +25,7 @@ export default function Motoristas() {
   const { data: cpfsCompletos } = useCpfsCompletos(ehAdmin)
   const pendentePorMotorista = useMemo(() => new Map((pendentes ?? []).map((s) => [s.motorista_id, s])), [pendentes])
   const [params, setParams] = useSearchParams()
-  const [selecionado, setSelecionado] = useState<Motorista | null>(null)
+  const [alvo, setAlvo] = useState<AlvoStatus | null>(null)
   const [limite, setLimite] = useState(POR_PAGINA)
 
   const busca = params.get('q') ?? ''
@@ -57,13 +57,22 @@ export default function Motoristas() {
     return lista.filter((m) => m.galpao === galpao)
   }, [data, galpao])
 
-  const contagem = useMemo(
-    () => ({
-      ativos: doGalpao.filter((m) => m.status === 'ativo').length,
-      inativos: doGalpao.filter((m) => m.status === 'inativo').length,
-    }),
-    [doGalpao],
-  )
+  // Placas (cadastros) agrupadas por pessoa.
+  const porPessoa = useMemo(() => {
+    const mapa = new Map<string, Motorista[]>()
+    for (const m of doGalpao) {
+      const chave = m.pessoa_id ?? m.id
+      mapa.set(chave, [...(mapa.get(chave) ?? []), m])
+    }
+    return mapa
+  }, [doGalpao])
+
+  // Motorista ativo = tem ao menos uma placa ativa.
+  const contagem = useMemo(() => {
+    let ativos = 0
+    for (const placas of porPessoa.values()) if (placas.some((p) => p.status === 'ativo')) ativos++
+    return { ativos, inativos: porPessoa.size - ativos }
+  }, [porPessoa])
 
   const filtrados = useMemo(() => {
     const termo = semAcento(buscaAdiada.trim())
@@ -83,6 +92,19 @@ export default function Motoristas() {
       )
     })
   }, [doGalpao, buscaAdiada, status, rota, cpfsCompletos])
+
+  // Mostra a pessoa inteira (todas as placas) se qualquer placa dela passou no filtro.
+  const pessoas = useMemo(() => {
+    const vistas = new Set<string>()
+    const lista: Motorista[][] = []
+    for (const m of filtrados) {
+      const chave = m.pessoa_id ?? m.id
+      if (vistas.has(chave)) continue
+      vistas.add(chave)
+      lista.push(porPessoa.get(chave) ?? [m])
+    }
+    return lista
+  }, [filtrados, porPessoa])
 
   function ehNovo(m: Motorista) {
     return (
@@ -150,8 +172,9 @@ export default function Motoristas() {
         </select>
         {data && (
           <div className="flex gap-2 text-sm">
-            <span className="rounded-full bg-emerald-100 px-3 py-1 font-semibold text-emerald-800">{contagem.ativos} ativos</span>
+            <span className="rounded-full bg-emerald-100 px-3 py-1 font-semibold text-emerald-800">{contagem.ativos} motoristas ativos</span>
             <span className="rounded-full bg-rose-50 px-3 py-1 font-semibold text-rose-700">{contagem.inativos} inativos</span>
+            <span className="px-1 py-1 text-slate-500">{doGalpao.length} placas</span>
           </div>
         )}
       </div>
@@ -164,35 +187,35 @@ export default function Motoristas() {
         <EstadoVazio titulo="Nenhum motorista por aqui">
           {ehAdmin ? 'Importe o CSV na aba CSV para começar.' : 'Ainda não há motoristas nos seus galpões.'}
         </EstadoVazio>
-      ) : filtrados.length === 0 ? (
+      ) : pessoas.length === 0 ? (
         <EstadoVazio titulo="Nenhum resultado">Tente outro nome, placa ou filtro.</EstadoVazio>
       ) : (
         <>
           <ul className="flex flex-col gap-3">
-            {filtrados.slice(0, limite).map((m) => (
-              <CardMotorista
-                key={m.id}
-                motorista={m}
-                novo={ehNovo(m)}
+            {pessoas.slice(0, limite).map((placas) => (
+              <CardPessoa
+                key={placas[0].pessoa_id ?? placas[0].id}
+                placas={placas}
+                novos={new Set(placas.filter(ehNovo).map((p) => p.id))}
                 mostrarGalpao={mostrarFiltroGalpao}
-                pendente={pendentePorMotorista.get(m.id)}
-                aoAlterarStatus={setSelecionado}
+                pendentes={pendentePorMotorista}
+                aoAlterarStatus={setAlvo}
               />
             ))}
           </ul>
-          {filtrados.length > limite && (
+          {pessoas.length > limite && (
             <button
               type="button"
               onClick={() => setLimite((l) => l + POR_PAGINA)}
               className="mt-4 min-h-12 w-full rounded-xl border border-slate-300 bg-white font-semibold text-sky-800"
             >
-              Mostrar mais ({filtrados.length - limite} restantes)
+              Mostrar mais ({pessoas.length - limite} restantes)
             </button>
           )}
         </>
       )}
 
-      <ModalStatus motorista={selecionado} aoFechar={() => setSelecionado(null)} />
+      <ModalStatus alvo={alvo} aoFechar={() => setAlvo(null)} />
     </Pagina>
   )
 }

@@ -2,7 +2,7 @@ import { useDeferredValue, useMemo, useState } from 'react'
 import { useAuth } from '../auth/AuthProvider'
 import { CartaoSolicitacao } from '../components/CartaoSolicitacao'
 import { Carregando, EstadoErro, EstadoVazio, Pagina } from '../components/ui'
-import { useDecididas, usePendentes } from '../hooks/solicitacoes'
+import { agruparPedidos, useDecididas, usePendentes } from '../hooks/solicitacoes'
 import { GALPOES } from '../lib/constantes'
 import { mensagemErro } from '../lib/erros'
 import type { Solicitacao } from '../lib/tipos'
@@ -51,7 +51,7 @@ export default function Pendencias() {
       <div className="mb-3 grid grid-cols-2 rounded-xl border border-slate-300 bg-white p-1" role="tablist">
         {(
           [
-            ['pendentes', `Pendentes${pendentes.data ? ` (${pendentes.data.length})` : ''}`],
+            ['pendentes', `Pendentes${pendentes.data ? ` (${agruparPedidos(pendentes.data).length})` : ''}`],
             ['decididas', 'Últimos 30 dias'],
           ] as const
         ).map(([valor, rotulo]) => (
@@ -102,9 +102,9 @@ export default function Pendencias() {
         <EstadoVazio titulo={aba === 'pendentes' ? 'Nenhum pedido pendente' : 'Nenhum pedido nos últimos 30 dias'} />
       ) : (
         <ul className="flex flex-col gap-3">
-          {filtradas.map((s) => (
-            <li key={s.id}>
-              <CartaoSolicitacao s={s} />
+          {agruparPedidos(filtradas).map((itens) => (
+            <li key={itens[0].grupo ?? itens[0].id}>
+              <CartaoSolicitacao itens={itens} />
             </li>
           ))}
         </ul>
