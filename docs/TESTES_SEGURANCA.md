@@ -63,7 +63,17 @@ Abra o app no celular e entre com `seuemail+srj1@...` e a senha temporária.
 - [ ] Os botões 📞 e WhatsApp abrem o discador e o WhatsApp com +55.
 - [ ] (Opcional) **Adicionar à tela inicial**: o ícone aparece e o app abre em tela cheia.
 
-## 4. Inativar e reativar (dispatcher SRJ1)
+## 4a. Pedido de inativação e aprovação
+
+- [ ] Como dispatcher SRJ1, toque em **Inativar** num motorista: a janela se chama **"Solicitar inativação"**. Depois de confirmar, o motorista **continua ativo**, com o selo **"Inativação solicitada"**.
+- [ ] O botão do card vira **"Ver pedido"**, e no detalhe aparece o pedido com **Cancelar pedido**.
+- [ ] O dispatcher SRJ2 não vê esse pedido.
+- [ ] Como admin, a aba **Pendências** mostra o contador. **Aprovar** exige marcar "Já enviei para a Coopmetro…". Ao aprovar, o motorista fica inativo, e o histórico mostra o admin e "Solicitado por …".
+- [ ] **Recusar** exige um motivo. O motorista continua ativo, e o dispatcher vê "Recusada" com a resposta em **Pedidos → Últimos 30 dias**.
+
+## 4. Inativar e reativar (admin) / reativar (dispatcher SRJ1)
+
+> Inativar **direto** agora é só para admin. O dispatcher faz o pedido (passo 4a).
 
 No card da **Ana (FAKE-1001)**, toque em **Inativar**.
 

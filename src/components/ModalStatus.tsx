@@ -1,17 +1,25 @@
 import { useState } from 'react'
+import { useAuth } from '../auth/AuthProvider'
 import { useAlterarStatus } from '../hooks/motoristas'
+import { useSolicitar } from '../hooks/solicitacoes'
 import { MOTIVOS_INATIVACAO } from '../lib/constantes'
 import { mensagemErro } from '../lib/erros'
 import type { Motorista } from '../lib/tipos'
 import { useToast } from './Toast'
 import { Botao, Modal } from './ui'
 
-/** Confirmação de inativação (com motivo) ou reativação. */
+/**
+ * Confirmação de inativação (com motivo) ou reativação.
+ * Dispatcher não inativa direto: envia uma solicitação que o admin aprova.
+ */
 export function ModalStatus({ motorista, aoFechar }: { motorista: Motorista | null; aoFechar: () => void }) {
+  const { ehAdmin } = useAuth()
+  const titulo =
+    motorista?.status !== 'ativo' ? 'Reativar motorista' : ehAdmin ? 'Inativar motorista' : 'Solicitar inativação'
   return (
     <Modal
       aberto={!!motorista}
-      titulo={motorista?.status === 'ativo' ? 'Inativar motorista' : 'Reativar motorista'}
+      titulo={titulo}
       aoFechar={aoFechar}
     >
       {motorista && <Conteudo key={motorista.id} motorista={motorista} aoFechar={aoFechar} />}
@@ -20,11 +28,14 @@ export function ModalStatus({ motorista, aoFechar }: { motorista: Motorista | nu
 }
 
 function Conteudo({ motorista, aoFechar }: { motorista: Motorista; aoFechar: () => void }) {
+  const { ehAdmin } = useAuth()
   const inativar = motorista.status === 'ativo'
+  const solicitar = inativar && !ehAdmin
   const [motivo, setMotivo] = useState('')
   const [observacao, setObservacao] = useState('')
   const [erro, setErro] = useState<string | null>(null)
   const alterar = useAlterarStatus()
+  const pedir = useSolicitar()
   const toast = useToast()
   const nome = motorista.nome_completo || motorista.codigo
 
@@ -33,6 +44,16 @@ function Conteudo({ motorista, aoFechar }: { motorista: Motorista; aoFechar: () 
     if (inativar && motivo === 'Outro' && !observacao.trim()) return setErro('Descreva o motivo na observação.')
     setErro(null)
     aoFechar()
+    if (solicitar) {
+      pedir.mutate(
+        { motoristaId: motorista.id, motivo, observacao: observacao.trim() || undefined },
+        {
+          onSuccess: () => toast(`Solicitação enviada. ${nome} continua ativo até a aprovação.`, 'sucesso'),
+          onError: (e) => toast(`Não foi possível solicitar: ${mensagemErro(e)}`, 'erro'),
+        },
+      )
+      return
+    }
     alterar.mutate(
       {
         motorista,
@@ -50,10 +71,17 @@ function Conteudo({ motorista, aoFechar }: { motorista: Motorista; aoFechar: () 
   return (
     <div className="flex flex-col gap-4">
       <p className="text-slate-700">
-        {inativar ? 'Confirma a inativação de ' : 'Confirma a reativação de '}
+        {solicitar ? 'Solicitar a inativação de ' : inativar ? 'Confirma a inativação de ' : 'Confirma a reativação de '}
         <strong>{nome}</strong>
         {motorista.placa ? ` (${motorista.placa})` : ''}?
       </p>
+
+      {solicitar && (
+        <p className="rounded-xl bg-amber-50 p-3 text-sm text-amber-900">
+          A equipe vai receber o pedido. O motorista só fica inativo depois que ela aprovar (envio para a Coopmetro e
+          baixa no sistema interno).
+        </p>
+      )}
 
       {inativar && (
         <fieldset className="flex flex-col gap-2">
@@ -99,7 +127,7 @@ function Conteudo({ motorista, aoFechar }: { motorista: Motorista; aoFechar: () 
           Cancelar
         </Botao>
         <Botao variante={inativar ? 'perigo' : 'sucesso'} onClick={confirmar}>
-          {inativar ? 'Inativar' : 'Reativar'}
+          {solicitar ? 'Solicitar' : inativar ? 'Inativar' : 'Reativar'}
         </Botao>
       </div>
     </div>

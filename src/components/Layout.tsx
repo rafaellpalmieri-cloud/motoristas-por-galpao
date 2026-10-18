@@ -1,6 +1,7 @@
 import { NavLink, Outlet } from 'react-router-dom'
 import { useAuth } from '../auth/AuthProvider'
 import { useContagemAlertas } from '../hooks/motoristas'
+import { usePendentes } from '../hooks/solicitacoes'
 
 function ItemNav({ para, icone, rotulo, selo }: { para: string; icone: string; rotulo: string; selo?: number }) {
   return (
@@ -27,6 +28,7 @@ function ItemNav({ para, icone, rotulo, selo }: { para: string; icone: string; r
 export function Layout() {
   const { usuario, ehAdmin, sair } = useAuth()
   const { data: alertas } = useContagemAlertas()
+  const { data: pendentes } = usePendentes()
 
   return (
     <div className="min-h-dvh bg-slate-50">
@@ -71,9 +73,14 @@ export function Layout() {
         <div className="mx-auto flex max-w-3xl">
           <ItemNav para="/" icone="🚚" rotulo="Motoristas" />
           <ItemNav para="/alertas" icone="🔔" rotulo="Alertas" selo={alertas} />
+          <ItemNav
+            para="/pendencias"
+            icone="📝"
+            rotulo={ehAdmin ? 'Pendências' : 'Pedidos'}
+            selo={pendentes?.length}
+          />
           {ehAdmin && <ItemNav para="/admin" icone="📊" rotulo="Painel" />}
           {ehAdmin && <ItemNav para="/admin/dispatchers" icone="👥" rotulo="Equipe" />}
-          {ehAdmin && <ItemNav para="/admin/importar" icone="⬆️" rotulo="CSV" />}
         </div>
       </nav>
     </div>

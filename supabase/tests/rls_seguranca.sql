@@ -189,25 +189,11 @@ begin
   if n <> 0 then raise exception 'FALHOU: dispatcher editou o próprio perfil diretamente'; end if;
   raise notice 'OK: dispatcher não edita perfil diretamente';
 
-  -- alterar_status sem motivo falha
+  -- Dispatcher NÃO inativa direto (precisa de aprovação)
   begin
-    perform public.alterar_status_motorista('10000000-0000-4000-a000-000000000001', 'inativo', null, null);
-    raise exception 'FALHOU: inativou sem motivo';
-  exception when invalid_parameter_value then raise notice 'OK: inativar sem motivo falha';
-  end;
-
-  -- motivo inválido falha
-  begin
-    perform public.alterar_status_motorista('10000000-0000-4000-a000-000000000001', 'inativo', 'Qualquer coisa', null);
-    raise exception 'FALHOU: aceitou motivo inválido';
-  exception when invalid_parameter_value then raise notice 'OK: motivo inválido falha';
-  end;
-
-  -- "Outro" sem observação falha
-  begin
-    perform public.alterar_status_motorista('10000000-0000-4000-a000-000000000001', 'inativo', 'Outro', '   ');
-    raise exception 'FALHOU: aceitou Outro sem observação';
-  exception when invalid_parameter_value then raise notice 'OK: motivo Outro sem observação falha';
+    perform public.alterar_status_motorista('10000000-0000-4000-a000-000000000001', 'inativo', 'Parou de rodar', null);
+    raise exception 'FALHOU: dispatcher inativou direto, sem aprovação';
+  exception when insufficient_privilege then raise notice 'OK: dispatcher não inativa direto (só por solicitação)';
   end;
 
   -- status inválido falha
@@ -217,17 +203,67 @@ begin
   exception when invalid_parameter_value then raise notice 'OK: status inválido falha';
   end;
 
-  -- Inativação válida funciona e grava histórico
-  perform public.alterar_status_motorista('10000000-0000-4000-a000-000000000001', 'inativo', 'Parou de rodar', 'teste automatizado');
-  select count(*) into n from public.motoristas
-   where codigo = 'TESTE-SRJ1' and status = 'inativo' and inativo_desde is not null and motivo_inativacao = 'Parou de rodar';
-  if n <> 1 then raise exception 'FALHOU: inativação válida não aplicada'; end if;
-  select count(*) into n from public.motorista_historico
-   where motorista_id = '10000000-0000-4000-a000-000000000001'
-     and status_anterior = 'ativo' and status_novo = 'inativo' and motivo = 'Parou de rodar'
-     and alterado_por = '00000000-0000-4000-a000-000000000002' and alterado_por_nome = 'Dispatcher SRJ1';
-  if n <> 1 then raise exception 'FALHOU: histórico da inativação não gravado'; end if;
-  raise notice 'OK: inativação válida aplica status e grava histórico';
+  -- Solicitação sem motivo falha
+  begin
+    perform public.solicitar_inativacao('10000000-0000-4000-a000-000000000001', null, null);
+    raise exception 'FALHOU: solicitou sem motivo';
+  exception when invalid_parameter_value then raise notice 'OK: solicitar inativação sem motivo falha';
+  end;
+
+  -- motivo inválido falha
+  begin
+    perform public.solicitar_inativacao('10000000-0000-4000-a000-000000000001', 'Qualquer coisa', null);
+    raise exception 'FALHOU: aceitou motivo inválido';
+  exception when invalid_parameter_value then raise notice 'OK: motivo inválido falha';
+  end;
+
+  -- "Outro" sem observação falha
+  begin
+    perform public.solicitar_inativacao('10000000-0000-4000-a000-000000000001', 'Outro', '   ');
+    raise exception 'FALHOU: aceitou Outro sem observação';
+  exception when invalid_parameter_value then raise notice 'OK: motivo Outro sem observação falha';
+  end;
+
+  -- Não solicita para motorista de outro galpão
+  begin
+    perform public.solicitar_inativacao('10000000-0000-4000-a000-000000000002', 'Parou de rodar', null);
+    raise exception 'FALHOU: dispatcher SRJ1 solicitou inativação no SRJ2';
+  exception when insufficient_privilege then raise notice 'OK: dispatcher não solicita inativação em outro galpão';
+  end;
+
+  -- Solicitação válida: fica pendente e o motorista continua ativo
+  perform public.solicitar_inativacao('10000000-0000-4000-a000-000000000001', 'Parou de rodar', 'teste automatizado');
+  if not exists (select 1 from public.solicitacoes_inativacao
+                 where motorista_id = '10000000-0000-4000-a000-000000000001' and status = 'pendente'
+                   and solicitado_por = '00000000-0000-4000-a000-000000000002' and solicitado_por_nome = 'Dispatcher SRJ1') then
+    raise exception 'FALHOU: solicitação não ficou pendente';
+  end if;
+  if not exists (select 1 from public.motoristas where codigo = 'TESTE-SRJ1' and status = 'ativo') then
+    raise exception 'FALHOU: motorista foi inativado antes da aprovação';
+  end if;
+  raise notice 'OK: solicitação fica pendente e o motorista continua ativo';
+
+  -- Segunda solicitação para o mesmo motorista falha
+  begin
+    perform public.solicitar_inativacao('10000000-0000-4000-a000-000000000001', 'Parou de rodar', null);
+    raise exception 'FALHOU: aceitou solicitação duplicada';
+  exception when invalid_parameter_value then raise notice 'OK: não aceita duas solicitações pendentes';
+  end;
+
+  -- Dispatcher não aprova
+  begin
+    perform public.decidir_solicitacao_inativacao(
+      (select id from public.solicitacoes_inativacao where status = 'pendente' limit 1), true, null);
+    raise exception 'FALHOU: dispatcher aprovou solicitação';
+  exception when insufficient_privilege then raise notice 'OK: dispatcher não aprova solicitação';
+  end;
+
+  -- Escrita direta na tabela de solicitações é bloqueada
+  begin
+    update public.solicitacoes_inativacao set status = 'aprovada';
+    raise exception 'FALHOU: dispatcher alterou solicitação direto';
+  exception when insufficient_privilege then raise notice 'OK: escrita direta em solicitações é bloqueada';
+  end;
 
   -- importar_motoristas por dispatcher falha
   begin
@@ -241,6 +277,65 @@ begin
     perform * from public.exportar_motoristas();
     raise exception 'FALHOU: dispatcher exportou motoristas';
   exception when insufficient_privilege then raise notice 'OK: exportar_motoristas por dispatcher falha';
+  end;
+end;
+$$;
+
+reset role;
+
+-- =====================================================================
+-- 2b. Solicitação: outro galpão não vê; admin aprova
+-- =====================================================================
+select set_config('request.jwt.claims', '{"sub":"00000000-0000-4000-a000-000000000003","role":"authenticated"}', true);
+set local role authenticated;
+
+do $$
+begin
+  if exists (select 1 from public.solicitacoes_inativacao) then
+    raise exception 'FALHOU: dispatcher SRJ2 viu solicitação do SRJ1';
+  end if;
+  raise notice 'OK: dispatcher de outro galpão não vê a solicitação';
+end;
+$$;
+
+reset role;
+select set_config('request.jwt.claims', '{"sub":"00000000-0000-4000-a000-000000000001","role":"authenticated"}', true);
+set local role authenticated;
+
+do $$
+declare v_id bigint;
+begin
+  select id into v_id from public.solicitacoes_inativacao where status = 'pendente';
+  if v_id is null then raise exception 'FALHOU: admin não vê a solicitação pendente'; end if;
+  raise notice 'OK: admin vê a solicitação pendente';
+
+  begin
+    perform public.decidir_solicitacao_inativacao(v_id, false, '  ');
+    raise exception 'FALHOU: recusou sem motivo';
+  exception when invalid_parameter_value then raise notice 'OK: recusar exige motivo';
+  end;
+
+  perform public.decidir_solicitacao_inativacao(v_id, true, 'Enviado para a Coopmetro');
+  if not exists (select 1 from public.motoristas where codigo = 'TESTE-SRJ1' and status = 'inativo'
+                 and inativo_desde is not null and motivo_inativacao = 'Parou de rodar') then
+    raise exception 'FALHOU: aprovação não inativou o motorista';
+  end if;
+  if not exists (select 1 from public.motorista_historico
+                 where motorista_id = '10000000-0000-4000-a000-000000000001' and status_novo = 'inativo'
+                   and alterado_por = '00000000-0000-4000-a000-000000000001'
+                   and observacao like '%Solicitado por Dispatcher SRJ1%') then
+    raise exception 'FALHOU: histórico da aprovação incompleto';
+  end if;
+  if not exists (select 1 from public.solicitacoes_inativacao where id = v_id and status = 'aprovada'
+                 and decidido_por_nome = 'Admin Teste' and resposta = 'Enviado para a Coopmetro') then
+    raise exception 'FALHOU: solicitação não marcada como aprovada';
+  end if;
+  raise notice 'OK: aprovação inativa o motorista, grava histórico e fecha a solicitação';
+
+  begin
+    perform public.decidir_solicitacao_inativacao(v_id, true, null);
+    raise exception 'FALHOU: aprovou duas vezes';
+  exception when invalid_parameter_value then raise notice 'OK: solicitação já decidida não muda de novo';
   end;
 end;
 $$;
@@ -346,7 +441,7 @@ begin
   raise notice 'OK: reimportar o mesmo CSV não sobrescreve status';
 
   -- Exportação
-  select count(*) into n from public.exportar_motoristas() e where e.codigo = 'TESTE-SRJ1' and e.atualizado_por_nome = 'Dispatcher SRJ1';
+  select count(*) into n from public.exportar_motoristas() e where e.codigo = 'TESTE-SRJ1' and e.atualizado_por_nome = 'Admin Teste';
   if n <> 1 then raise exception 'FALHOU: exportação sem autor da última alteração'; end if;
   raise notice 'OK: exportação traz autor da última alteração';
 
@@ -693,6 +788,43 @@ begin
   reset role;
 end;
 $$;
+
+-- =====================================================================
+-- 11. Solicitação: cancelar e fechamento automático pela planilha
+-- =====================================================================
+select set_config('request.jwt.claims', '{"sub":"00000000-0000-4000-a000-000000000002","role":"authenticated"}', true);
+set local role authenticated;
+
+do $$
+declare v_sol public.solicitacoes_inativacao;
+begin
+  v_sol := public.solicitar_inativacao('10000000-0000-4000-a000-000000000001', 'Documentação', null);
+  perform public.cancelar_solicitacao_inativacao(v_sol.id);
+  if not exists (select 1 from public.solicitacoes_inativacao where id = v_sol.id and status = 'cancelada') then
+    raise exception 'FALHOU: dispatcher não cancelou a própria solicitação';
+  end if;
+  raise notice 'OK: dispatcher cancela a própria solicitação';
+
+  perform public.solicitar_inativacao('10000000-0000-4000-a000-000000000001', 'Parou de rodar', null);
+end;
+$$;
+
+reset role;
+select set_config('request.jwt.claims', '{"role":"service_role"}', true);
+set local role service_role;
+
+do $$
+begin
+  perform public.sincronizar_inativos_planilha('[{"linha":50,"placa":"TST9999","data":"","motivo":"Parou de rodar"}]'::jsonb);
+  if exists (select 1 from public.solicitacoes_inativacao
+             where motorista_id = '10000000-0000-4000-a000-000000000001' and status = 'pendente') then
+    raise exception 'FALHOU: inativação pela planilha não fechou a solicitação pendente';
+  end if;
+  raise notice 'OK: inativação pela planilha fecha a solicitação pendente';
+end;
+$$;
+
+reset role;
 
 do $$ begin raise notice '=== TODOS OS TESTES PASSARAM ==='; end $$;
 

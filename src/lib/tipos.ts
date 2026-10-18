@@ -30,6 +30,25 @@ export interface Historico {
   origem: 'app' | 'planilha'
 }
 
+export type StatusSolicitacao = 'pendente' | 'aprovada' | 'recusada' | 'cancelada'
+
+export interface Solicitacao {
+  id: number
+  motorista_id: string
+  galpao: string | null
+  motivo: string
+  observacao: string | null
+  status: StatusSolicitacao
+  solicitado_por: string | null
+  solicitado_por_nome: string | null
+  solicitado_em: string
+  decidido_por: string | null
+  decidido_por_nome: string | null
+  decidido_em: string | null
+  resposta: string | null
+  motoristas?: { nome_completo: string | null; placa: string | null; codigo: string; celular: string | null } | null
+}
+
 export interface Perfil {
   user_id: string
   nome: string

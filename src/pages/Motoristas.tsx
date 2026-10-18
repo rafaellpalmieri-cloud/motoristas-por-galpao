@@ -5,6 +5,7 @@ import { CardMotorista } from '../components/CardMotorista'
 import { ModalStatus } from '../components/ModalStatus'
 import { Carregando, EstadoErro, EstadoVazio, Pagina } from '../components/ui'
 import { useMotoristas } from '../hooks/motoristas'
+import { usePendentes } from '../hooks/solicitacoes'
 import { GALPOES, SEM_GALPAO } from '../lib/constantes'
 import { mensagemErro } from '../lib/erros'
 import type { Motorista } from '../lib/tipos'
@@ -19,6 +20,8 @@ function semAcento(texto: string) {
 export default function Motoristas() {
   const { usuario, ehAdmin, session } = useAuth()
   const { data, isPending, error, refetch } = useMotoristas()
+  const { data: pendentes } = usePendentes()
+  const pendentePorMotorista = useMemo(() => new Map((pendentes ?? []).map((s) => [s.motorista_id, s])), [pendentes])
   const [params, setParams] = useSearchParams()
   const [selecionado, setSelecionado] = useState<Motorista | null>(null)
   const [limite, setLimite] = useState(POR_PAGINA)
@@ -153,6 +156,7 @@ export default function Motoristas() {
                 motorista={m}
                 novo={ehNovo(m)}
                 mostrarGalpao={mostrarFiltroGalpao}
+                pendente={pendentePorMotorista.get(m.id)}
                 aoAlterarStatus={setSelecionado}
               />
             ))}

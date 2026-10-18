@@ -8,6 +8,7 @@ import Alertas from './pages/Alertas'
 import EsqueciSenha from './pages/EsqueciSenha'
 import Login from './pages/Login'
 import MotoristaDetalhe from './pages/MotoristaDetalhe'
+import Pendencias from './pages/Pendencias'
 import Motoristas from './pages/Motoristas'
 import RedefinirSenha from './pages/RedefinirSenha'
 import TrocarSenha from './pages/TrocarSenha'
@@ -53,6 +54,7 @@ export default function App() {
               <Route index element={<Motoristas />} />
               <Route path="/motoristas/:id" element={<MotoristaDetalhe />} />
               <Route path="/alertas" element={<Alertas />} />
+              <Route path="/pendencias" element={<Pendencias />} />
               <Route element={<RotaAdmin />}>
                 <Route path="/admin" element={<Painel />} />
                 <Route path="/admin/dispatchers" element={<Dispatchers />} />

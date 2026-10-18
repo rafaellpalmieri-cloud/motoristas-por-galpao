@@ -2,7 +2,9 @@ import { useState, type ReactNode } from 'react'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { ModalStatus } from '../components/ModalStatus'
 import { BadgeStatus, Botao, Carregando, Cartao, EstadoErro, EstadoVazio, Pagina, SeloPlanilha } from '../components/ui'
+import { CartaoSolicitacao } from '../components/CartaoSolicitacao'
 import { useHistorico, useMotorista } from '../hooks/motoristas'
+import { useSolicitacoesDoMotorista } from '../hooks/solicitacoes'
 import { formatarData, formatarDataHora } from '../lib/datas'
 import { mensagemErro } from '../lib/erros'
 import { formatarCelular, linkTelefone, linkWhatsApp } from '../lib/telefone'
@@ -23,6 +25,7 @@ export default function MotoristaDetalhe() {
   const location = useLocation()
   const motorista = useMotorista(id)
   const historico = useHistorico(id)
+  const solicitacoes = useSolicitacoesDoMotorista(id)
   const [selecionado, setSelecionado] = useState<Motorista | null>(null)
 
   const voltar = (
@@ -51,6 +54,8 @@ export default function MotoristaDetalhe() {
       </Pagina>
     )
 
+  const pedidoPendente = solicitacoes.data?.find((s) => s.status === 'pendente')
+  const ultimosPedidos = (solicitacoes.data ?? []).filter((s) => s.status !== 'pendente').slice(0, 5)
   const tel = linkTelefone(m.celular)
   const wa = linkWhatsApp(m.celular)
 
@@ -86,11 +91,32 @@ export default function MotoristaDetalhe() {
               WhatsApp
             </a>
           )}
-          <Botao variante={m.status === 'ativo' ? 'perigo' : 'sucesso'} className="col-span-2" onClick={() => setSelecionado(m)}>
-            {m.status === 'ativo' ? 'Inativar' : 'Reativar'}
-          </Botao>
+          {!(pedidoPendente && m.status === 'ativo') && (
+            <Botao variante={m.status === 'ativo' ? 'perigo' : 'sucesso'} className="col-span-2" onClick={() => setSelecionado(m)}>
+              {m.status === 'ativo' ? 'Inativar' : 'Reativar'}
+            </Botao>
+          )}
         </div>
       </Cartao>
+
+      {pedidoPendente && m.status === 'ativo' && (
+        <div className="mb-4">
+          <CartaoSolicitacao s={pedidoPendente} mostrarMotorista={false} />
+        </div>
+      )}
+
+      {ultimosPedidos.length > 0 && (
+        <details className="mb-4 rounded-2xl border border-slate-200 bg-white">
+          <summary className="min-h-11 cursor-pointer px-4 py-3 font-semibold text-slate-800">
+            Pedidos anteriores ({ultimosPedidos.length})
+          </summary>
+          <div className="flex flex-col gap-2 px-3 pb-3">
+            {ultimosPedidos.map((s) => (
+              <CartaoSolicitacao key={s.id} s={s} mostrarMotorista={false} />
+            ))}
+          </div>
+        </details>
+      )}
 
       <h2 className="mb-2 text-lg font-bold text-slate-900">Histórico</h2>
       {historico.isPending ? (

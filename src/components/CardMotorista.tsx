@@ -1,20 +1,23 @@
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { formatarData } from '../lib/datas'
 import { formatarCelular, linkTelefone, linkWhatsApp } from '../lib/telefone'
-import type { Motorista } from '../lib/tipos'
+import type { Motorista, Solicitacao } from '../lib/tipos'
 import { BadgeStatus, Botao } from './ui'
 
 export function CardMotorista({
   motorista,
   novo,
   mostrarGalpao,
+  pendente,
   aoAlterarStatus,
 }: {
   motorista: Motorista
   novo: boolean
   mostrarGalpao: boolean
+  pendente?: Solicitacao
   aoAlterarStatus: (m: Motorista) => void
 }) {
+  const navigate = useNavigate()
   const tel = linkTelefone(motorista.celular)
   const wa = linkWhatsApp(motorista.celular)
   const ativo = motorista.status === 'ativo'
@@ -36,6 +39,11 @@ export function CardMotorista({
         </Link>
         <div className="flex flex-col items-end gap-1">
           <BadgeStatus status={motorista.status} />
+          {pendente && motorista.status === 'ativo' && (
+            <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-bold uppercase text-amber-900">
+              Inativação solicitada
+            </span>
+          )}
           {novo && (
             <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-bold uppercase text-amber-800">Novo</span>
           )}
@@ -71,13 +79,19 @@ export function CardMotorista({
             WhatsApp
           </a>
         )}
-        <Botao
-          variante={ativo ? 'secundario' : 'sucesso'}
-          className={`ml-auto ${ativo ? 'text-rose-700' : ''}`}
-          onClick={() => aoAlterarStatus(motorista)}
-        >
-          {ativo ? 'Inativar' : 'Reativar'}
-        </Botao>
+        {pendente && ativo ? (
+          <Botao variante="secundario" className="ml-auto text-amber-800" onClick={() => navigate(`/motoristas/${motorista.id}`)}>
+            Ver pedido
+          </Botao>
+        ) : (
+          <Botao
+            variante={ativo ? 'secundario' : 'sucesso'}
+            className={`ml-auto ${ativo ? 'text-rose-700' : ''}`}
+            onClick={() => aoAlterarStatus(motorista)}
+          >
+            {ativo ? 'Inativar' : 'Reativar'}
+          </Botao>
+        )}
       </div>
     </li>
   )
