@@ -22,7 +22,7 @@ const CONFIG = {
   ABA_ATIVOS: 'ATIVOS',
   ABA_INATIVOS: 'INATIVOS',
   URL_FUNCAO: 'https://idihrzbchxaptjgvsjfu.supabase.co/functions/v1/sincronizar-planilha',
-  TAMANHO_LOTE: 500,
+  TAMANHO_LOTE: 200,
   INTERVALO_MINUTOS: 15,
 };
 
