@@ -8,7 +8,10 @@
  *  - preencherCodigos   → UMA vez: cria/preenche a coluna "codigo" nas abas ATIVOS e INATIVOS
  *                          com o código que o motorista já tem no app (busca por placa/celular).
  *  - sincronizarTudo    → envia ATIVOS (novos e dados atualizados) e depois INATIVOS (inativações).
- *  - instalarGatilho    → UMA vez: agenda sincronizarTudo a cada 15 minutos.
+ *  - instalarGatilho    → UMA vez: agenda sincronizarTudo a cada 15 minutos e o
+ *                          backup semanal (domingo de madrugada).
+ *  - fazerBackup        → salva no seu Google Drive uma cópia (CSV) de motoristas,
+ *                          histórico, pedidos e equipe. Mantém os 12 últimos.
  *  - doPost             → recebe do app as movimentações (aba "MOVIMENTAÇÕES APP");
  *                          só funciona depois de Implantar → App da Web.
  *
@@ -23,6 +26,8 @@ const CONFIG = {
   ABA_INATIVOS: 'INATIVOS',
   URL_FUNCAO: 'https://idihrzbchxaptjgvsjfu.supabase.co/functions/v1/sincronizar-planilha',
   TAMANHO_LOTE: 200,
+  PASTA_BACKUP: 'Backups - Motoristas por Galpão',
+  BACKUPS_MANTIDOS: 12,
   INTERVALO_MINUTOS: 15,
 };
 
@@ -268,14 +273,63 @@ function doPost(e) {
   }
 }
 
-/** Rode UMA vez para agendar a sincronização automática. */
+// ---------------------------------------------------------------------
+// Backup semanal no Google Drive (CSV com BOM, abre no Excel e no Sheets).
+// Contém CPF: a pasta fica só no seu Drive; não compartilhe.
+// ---------------------------------------------------------------------
+function csv_(linhas) {
+  if (!linhas.length) return '\uFEFF';
+  const colunas = Object.keys(linhas[0]);
+  const esc = function (v) {
+    const t = v === null || v === undefined ? '' : String(v);
+    return /[";\n\r]/.test(t) ? '"' + t.replace(/"/g, '""') + '"' : t;
+  };
+  return '\uFEFF' + [colunas.join(';')].concat(linhas.map(function (l) {
+    return colunas.map(function (c) { return esc(l[c]); }).join(';');
+  })).join('\r\n');
+}
+
+function fazerBackup() {
+  const resposta = UrlFetchApp.fetch(CONFIG.URL_FUNCAO, {
+    method: 'post',
+    contentType: 'application/json',
+    headers: { 'x-sync-token': token_() },
+    payload: JSON.stringify({ acao: 'backup' }),
+    muteHttpExceptions: true,
+  });
+  if (resposta.getResponseCode() !== 200) throw new Error('Falha no backup (' + resposta.getResponseCode() + '): ' + resposta.getContentText());
+  const dados = JSON.parse(resposta.getContentText());
+  if (dados.erro) throw new Error('Falha no backup: ' + dados.erro);
+
+  const pastas = DriveApp.getFoldersByName(CONFIG.PASTA_BACKUP);
+  const pasta = pastas.hasNext() ? pastas.next() : DriveApp.createFolder(CONFIG.PASTA_BACKUP);
+  const dia = Utilities.formatDate(new Date(), 'America/Sao_Paulo', 'yyyy-MM-dd_HHmm');
+  const subpasta = pasta.createFolder(dia);
+  ['motoristas', 'historico', 'pedidos', 'equipe'].forEach(function (nome) {
+    subpasta.createFile(nome + '_' + dia + '.csv', csv_(dados[nome] || []), MimeType.CSV);
+  });
+
+  // Mantém só os N backups mais recentes (os antigos vão para a lixeira do Drive).
+  const todas = [];
+  const it = pasta.getFolders();
+  while (it.hasNext()) todas.push(it.next());
+  todas.sort(function (a, b) { return b.getName() < a.getName() ? -1 : 1; });
+  todas.slice(CONFIG.BACKUPS_MANTIDOS).forEach(function (f) { f.setTrashed(true); });
+
+  console.log('Backup salvo em "' + CONFIG.PASTA_BACKUP + '/' + dia + '": ' +
+    (dados.motoristas || []).length + ' motoristas, ' + (dados.historico || []).length + ' movimentações, ' +
+    (dados.pedidos || []).length + ' pedidos.');
+}
+
+/** Rode UMA vez: sincronização a cada 15 min + backup semanal (domingo 03h). */
 function instalarGatilho() {
   ScriptApp.getProjectTriggers()
     .filter(function (t) {
       const f = t.getHandlerFunction();
-      return f === 'sincronizarInativos' || f === 'sincronizarTudo';
+      return f === 'sincronizarInativos' || f === 'sincronizarTudo' || f === 'fazerBackup';
     })
     .forEach(function (t) { ScriptApp.deleteTrigger(t); });
   ScriptApp.newTrigger('sincronizarTudo').timeBased().everyMinutes(CONFIG.INTERVALO_MINUTOS).create();
-  console.log('Gatilho criado: sincronizarTudo a cada ' + CONFIG.INTERVALO_MINUTOS + ' minutos.');
+  ScriptApp.newTrigger('fazerBackup').timeBased().onWeekDay(ScriptApp.WeekDay.SUNDAY).atHour(3).create();
+  console.log('Gatilhos criados: sincronizarTudo a cada ' + CONFIG.INTERVALO_MINUTOS + ' minutos e fazerBackup aos domingos às 3h.');
 }

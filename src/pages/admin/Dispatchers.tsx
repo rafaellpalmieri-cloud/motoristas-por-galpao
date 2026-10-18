@@ -4,6 +4,7 @@ import { useAuth } from '../../auth/AuthProvider'
 import { useToast } from '../../components/Toast'
 import { Botao, Campo, Carregando, EstadoErro, EstadoVazio, Modal, Pagina } from '../../components/ui'
 import { GALPOES } from '../../lib/constantes'
+import { formatarDataHora, tempoRelativo } from '../../lib/datas'
 import { mensagemErro, mensagemErroFuncao } from '../../lib/erros'
 import { supabase } from '../../lib/supabase'
 import { formatarCelular, linkTelefone, linkWhatsApp } from '../../lib/telefone'
@@ -19,7 +20,10 @@ function useUsuarios() {
     queryKey: ['admin', 'usuarios'],
     queryFn: async (): Promise<Usuario[]> => {
       const [perfis, papeis, galpoes] = await Promise.all([
-        supabase.from('perfis').select('user_id, nome, email, telefone, ativo, trocar_senha, alertas_vistos_em').order('nome'),
+        supabase
+          .from('perfis')
+          .select('user_id, nome, email, telefone, ativo, trocar_senha, alertas_vistos_em, ultimo_acesso')
+          .order('nome'),
         supabase.from('user_roles').select('user_id, role'),
         supabase.from('dispatcher_galpoes').select('user_id, galpao'),
       ])
@@ -391,6 +395,11 @@ export default function Dispatchers() {
                       {u.nome} {souEu && <span className="text-sm font-normal text-slate-500">(você)</span>}
                     </p>
                     <p className="truncate text-sm text-slate-500">{u.email}</p>
+                    <p className={`text-xs ${u.ultimo_acesso ? 'text-slate-500' : 'text-amber-700'}`}>
+                      {u.ultimo_acesso
+                        ? `Último acesso ${tempoRelativo(u.ultimo_acesso)} (${formatarDataHora(u.ultimo_acesso)})`
+                        : 'Ainda não acessou o app'}
+                    </p>
                   </div>
                   <div className="flex flex-col items-end gap-1 text-xs font-bold">
                     {ehAdmin && <span className="rounded-full bg-sky-100 px-2 py-0.5 text-sky-800">ADMIN</span>}

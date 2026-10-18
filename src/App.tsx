@@ -17,6 +17,7 @@ import TrocarSenha from './pages/TrocarSenha'
 const Painel = lazy(() => import('./pages/admin/Painel'))
 const Dispatchers = lazy(() => import('./pages/admin/Dispatchers'))
 const Csv = lazy(() => import('./pages/admin/Csv'))
+const Relatorio = lazy(() => import('./pages/admin/Relatorio'))
 
 function NaoEncontrada() {
   return (
@@ -59,6 +60,7 @@ export default function App() {
                 <Route path="/admin" element={<Painel />} />
                 <Route path="/admin/dispatchers" element={<Dispatchers />} />
                 <Route path="/admin/importar" element={<Csv />} />
+                <Route path="/admin/relatorio" element={<Relatorio />} />
               </Route>
               <Route path="*" element={<NaoEncontrada />} />
             </Route>

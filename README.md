@@ -10,6 +10,11 @@ App web (pensado para celular) para os dispatchers dos galpões **SRJ1, SRJ2, SR
 
 - **Integração com a planilha interna (Google Sheets):** a cada 15 minutos, motoristas novos da aba ATIVOS são cadastrados (pelo código) e os movidos para a aba INATIVOS são inativados no app, gerando alerta com o selo **Planilha**. Da aba ATIVOS também vêm o **CPF** e as informações de rota (fez rota, quantidade, última rota). RG e endereço nunca saem da planilha. Configuração em [`docs/PLANILHA_SHEETS.md`](docs/PLANILHA_SHEETS.md).
 
+- **Painel de atenção (admin):** por galpão, ativos que **nunca rodaram**, **parados há 30+ dias** e **pedidos pendentes/atrasados**, com atalhos para a lista filtrada.
+- **Lembretes automáticos:** toda segunda às 8h cada dispatcher recebe o resumo dos seus galpões; pedido sem resposta há mais de 24 h avisa os admins (pg_cron).
+- **Relatório mensal (admin):** inativações por motivo e galpão, pedidos por dispatcher, tempo médio de resposta; exporta CSV.
+- **Último acesso** de cada usuário na tela Equipe.
+- **Backup semanal** no Google Drive (Apps Script da planilha): CSV de motoristas, histórico, pedidos e equipe; mantém os 12 últimos.
 - **Notificações no celular e no computador:** o dispatcher recebe aviso quando um motorista do galpão dele é inativado ou reativado, e quando o pedido dele é respondido; o admin recebe os novos pedidos. Cada pessoa ativa em **Alertas → Ativar notificações**. Detalhes em [`docs/NOTIFICACOES.md`](docs/NOTIFICACOES.md). (WhatsApp via Z-API e aba de movimentações na planilha são opcionais: [`docs/AVISOS_WHATSAPP.md`](docs/AVISOS_WHATSAPP.md).)
 
 Stack: Vite + React + TypeScript, Tailwind CSS, React Router, TanStack Query, supabase-js, Papa Parse. Backend: Supabase (Postgres + RLS, Auth, Edge Functions).

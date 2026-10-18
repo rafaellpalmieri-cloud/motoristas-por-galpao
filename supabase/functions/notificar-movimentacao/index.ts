@@ -6,6 +6,9 @@
 //  { solicitacao_id, status } → pedido de inativação:
 //      • "pendente": push para os admins ativos;
 //      • "aprovada"/"recusada": push para quem pediu.
+//  { tarefa } → tarefas agendadas (pg_cron):
+//      • "lembrete_semanal": resumo para cada dispatcher (parados 30+ dias, nunca rodou);
+//      • "pedidos_parados": avisa os admins de pedidos sem resposta há mais de 24 h.
 //
 // Autenticação: cabeçalho "x-webhook-token" igual ao secret NOTIFICAR_TOKEN.
 // Secrets: NOTIFICAR_TOKEN, VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY
@@ -100,6 +103,8 @@ Deno.serve(async (req) => {
     auth: { persistSession: false, autoRefreshToken: false },
   })
 
+  if (corpo?.tarefa === 'lembrete_semanal') return json(await lembreteSemanal(admin))
+  if (corpo?.tarefa === 'pedidos_parados') return json(await pedidosParados(admin))
   if (corpo?.solicitacao_id) return await tratarPedido(admin, Number(corpo.solicitacao_id), String(corpo.status ?? ''))
   if (corpo?.historico_id) return await tratarMovimento(admin, Number(corpo.historico_id))
   return json({ erro: 'Corpo inválido.' }, 400)
@@ -338,4 +343,105 @@ async function registrarNaPlanilha(mov: Movimento) {
   } catch (e) {
     return { ok: false, erro: (e as Error).message }
   }
+}
+
+// ---------------------------------------------------------------------
+// Tarefas agendadas
+// ---------------------------------------------------------------------
+const DIAS_PARADO = 30
+
+function hojeBrasilia(): string {
+  return new Date().toLocaleDateString('sv-SE', { timeZone: 'America/Sao_Paulo' })
+}
+
+/** Segunda 08:00: cada dispatcher recebe o resumo dos seus galpões. */
+async function lembreteSemanal(admin: SupabaseClient) {
+  const limite = new Date(new Date(hojeBrasilia()).getTime() - DIAS_PARADO * 86_400_000).toISOString().slice(0, 10)
+
+  // Motoristas ativos, em páginas (o PostgREST devolve no máximo 1000 por vez).
+  const ativos: { galpao: string | null; realizou_rotas: boolean | null; qtd_rotas: number | null; ultima_rota: string | null }[] = []
+  for (let de = 0; ; de += 1000) {
+    const { data, error } = await admin
+      .from('motoristas')
+      .select('galpao, realizou_rotas, qtd_rotas, ultima_rota')
+      .eq('status', 'ativo')
+      .range(de, de + 999)
+    if (error) return { erro: error.message }
+    ativos.push(...(data ?? []))
+    if (!data || data.length < 1000) break
+  }
+
+  const porGalpao = new Map<string, { nunca: number; parados: number }>()
+  for (const m of ativos) {
+    if (!m.galpao) continue
+    const c = porGalpao.get(m.galpao) ?? { nunca: 0, parados: 0 }
+    const nunca = m.realizou_rotas === false || m.qtd_rotas === 0
+    if (nunca) c.nunca++
+    else if (m.ultima_rota && m.ultima_rota <= limite) c.parados++
+    porGalpao.set(m.galpao, c)
+  }
+
+  const [{ data: vinculos }, { data: papeis }, { data: perfis }] = await Promise.all([
+    admin.from('dispatcher_galpoes').select('user_id, galpao'),
+    admin.from('user_roles').select('user_id').eq('role', 'dispatcher'),
+    admin.from('perfis').select('user_id').eq('ativo', true),
+  ])
+  const dispatchers = new Set((papeis ?? []).map((p) => p.user_id as string))
+  const ativosIds = new Set((perfis ?? []).map((p) => p.user_id as string))
+  const galpoesDe = new Map<string, string[]>()
+  for (const v of vinculos ?? []) {
+    const id = v.user_id as string
+    if (!dispatchers.has(id) || !ativosIds.has(id)) continue
+    galpoesDe.set(id, [...(galpoesDe.get(id) ?? []), v.galpao as string])
+  }
+
+  let avisados = 0
+  for (const [id, galpoes] of galpoesDe) {
+    const soma = galpoes.reduce(
+      (t, g) => ({ nunca: t.nunca + (porGalpao.get(g)?.nunca ?? 0), parados: t.parados + (porGalpao.get(g)?.parados ?? 0) }),
+      { nunca: 0, parados: 0 },
+    )
+    if (!soma.nunca && !soma.parados) continue
+    const r = await enviarPush(admin, [id], {
+      title: `📋 Resumo da semana · ${galpoes.join(', ')}`,
+      body: [
+        soma.parados ? `${soma.parados} motorista(s) ativo(s) sem rota há ${DIAS_PARADO}+ dias` : null,
+        soma.nunca ? `${soma.nunca} motorista(s) ativo(s) que nunca fizeram rota` : null,
+        'Toque para ver a lista.',
+      ]
+        .filter(Boolean)
+        .join('\n'),
+      url: soma.parados ? '/?status=ativo&rota=parado' : '/?status=ativo&rota=nunca',
+      tag: 'resumo-semanal',
+    })
+    if ('enviados' in r && r.enviados) avisados++
+  }
+  return { ok: true, dispatchers: galpoesDe.size, avisados }
+}
+
+/** De hora em hora: pedidos pendentes há mais de 24 h (lembra a cada 24 h). */
+async function pedidosParados(admin: SupabaseClient) {
+  const corte = new Date(Date.now() - 24 * 3600 * 1000).toISOString()
+  const { data: atrasados, error } = await admin
+    .from('solicitacoes_inativacao')
+    .select('id, grupo, galpao')
+    .eq('status', 'pendente')
+    .lt('solicitado_em', corte)
+    .or(`lembrete_em.is.null,lembrete_em.lt.${corte}`)
+  if (error) return { erro: error.message }
+  if (!atrasados?.length) return { ok: true, pedidos: 0 }
+
+  const pedidos = new Set(atrasados.map((s) => (s.grupo as string | null) ?? `id-${s.id}`)).size
+  const galpoes = [...new Set(atrasados.map((s) => s.galpao ?? 'sem galpão'))].join(', ')
+  const push = await enviarPush(admin, await adminsAtivos(admin), {
+    title: '⏰ Pedidos aguardando resposta',
+    body: `${pedidos} pedido(s) de inativação há mais de 24 h sem resposta (${galpoes}).`,
+    url: '/pendencias',
+    tag: 'pedidos-parados',
+  })
+  await admin
+    .from('solicitacoes_inativacao')
+    .update({ lembrete_em: new Date().toISOString() })
+    .in('id', atrasados.map((s) => s.id as number))
+  return { ok: true, pedidos, push }
 }

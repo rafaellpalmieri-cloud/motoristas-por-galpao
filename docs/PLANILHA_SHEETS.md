@@ -40,6 +40,17 @@ O token da sincronização fica no arquivo `supabase/.planilha_sync_token`, que 
 
 Se o Google pedir autorização de novo (o script agora também escreve na coluna de código), escolha sua conta → **Avançado → Acessar (não seguro)** → **Permitir**.
 
+## Backup semanal no Google Drive
+
+O mesmo script faz uma cópia de segurança toda semana, aos domingos às 3h. O agendamento é criado pelo `instalarGatilho`.
+
+- Pasta no seu Drive: **"Backups - Motoristas por Galpão"**, com uma subpasta por data.
+- Arquivos CSV: `motoristas` (com CPF), `historico`, `pedidos` e `equipe`.
+- Ficam os **12 backups mais recentes**; os mais antigos vão para a lixeira do Drive.
+- Para fazer um backup na hora, execute **`fazerBackup`**.
+- Ao rodar pela primeira vez, o Google pede permissão para o script usar o **Google Drive**. Aceite.
+- **Não compartilhe essa pasta:** ela tem os CPFs.
+
 ## No dia a dia
 
 - **Motorista novo:** cadastre na aba ATIVOS **com o código** preenchido. Em até 15 minutos ele aparece no app como ativo.

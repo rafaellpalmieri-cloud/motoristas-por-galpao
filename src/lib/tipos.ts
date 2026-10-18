@@ -65,4 +65,5 @@ export interface Perfil {
   ativo: boolean
   trocar_senha: boolean
   alertas_vistos_em: string
+  ultimo_acesso?: string | null
 }

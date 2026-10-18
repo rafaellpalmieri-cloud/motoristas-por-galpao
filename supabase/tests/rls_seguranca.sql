@@ -1169,6 +1169,78 @@ $$;
 
 reset role;
 
+-- =====================================================================
+-- 16. Painel de atenção, relatório, último acesso e agendamentos
+-- =====================================================================
+select set_config('request.jwt.claims', '{"sub":"00000000-0000-4000-a000-000000000002","role":"authenticated"}', true);
+set local role authenticated;
+
+do $$
+begin
+  if exists (select 1 from public.painel_atencao() p where p.galpao is distinct from 'SRJ1') then
+    raise exception 'FALHOU: painel do dispatcher SRJ1 mostrou outro galpão';
+  end if;
+  if not exists (select 1 from public.painel_atencao() p where p.galpao = 'SRJ1' and p.ativos > 0) then
+    raise exception 'FALHOU: painel do dispatcher sem o próprio galpão';
+  end if;
+  raise notice 'OK: painel de atenção mostra só os galpões do usuário';
+
+  begin
+    perform public.relatorio_mensal(current_date);
+    raise exception 'FALHOU: dispatcher abriu o relatório mensal';
+  exception when insufficient_privilege then raise notice 'OK: relatório mensal é só para admin';
+  end;
+
+  begin
+    perform public.disparar_tarefa('lembrete_semanal');
+    raise exception 'FALHOU: usuário disparou tarefa agendada';
+  exception when insufficient_privilege then raise notice 'OK: tarefas agendadas não podem ser disparadas pelo app';
+  end;
+
+  perform public.registrar_acesso();
+  if not exists (select 1 from public.perfis where user_id = '00000000-0000-4000-a000-000000000002' and ultimo_acesso is not null) then
+    raise exception 'FALHOU: último acesso não registrado';
+  end if;
+  raise notice 'OK: último acesso é registrado';
+end;
+$$;
+
+reset role;
+select set_config('request.jwt.claims', '{"sub":"00000000-0000-4000-a000-000000000001","role":"authenticated"}', true);
+set local role authenticated;
+
+do $$
+declare r jsonb;
+begin
+  r := public.relatorio_mensal(current_date);
+  if (r -> 'totais' ->> 'inativacoes')::int < 1 or jsonb_array_length(r -> 'por_motivo') < 1
+     or jsonb_typeof(r -> 'por_galpao') <> 'array' or jsonb_typeof(r -> 'por_dispatcher') <> 'array' then
+    raise exception 'FALHOU: relatório mensal incompleto: %', r;
+  end if;
+  raise notice 'OK: admin gera o relatório mensal';
+
+  if (select count(*) from public.painel_atencao()) < 3 then
+    raise exception 'FALHOU: painel do admin não mostra todos os galpões';
+  end if;
+  raise notice 'OK: painel do admin mostra todos os galpões';
+end;
+$$;
+
+reset role;
+
+do $$
+begin
+  if to_regclass('cron._jobs_teste') is null then
+    raise notice 'OK: (pulado fora do PGlite) agendamentos';
+    return;
+  end if;
+  if (select count(*) from cron._jobs_teste where nome in ('lembrete-semanal-dispatchers', 'aviso-pedidos-parados')) <> 2 then
+    raise exception 'FALHOU: tarefas agendadas não foram criadas';
+  end if;
+  raise notice 'OK: lembrete semanal e aviso de pedido parado estão agendados';
+end;
+$$;
+
 do $$ begin raise notice '=== TODOS OS TESTES PASSARAM ==='; end $$;
 
 rollback;

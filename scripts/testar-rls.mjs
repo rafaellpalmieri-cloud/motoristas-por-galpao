@@ -35,13 +35,20 @@ const ambienteSupabase = `
   returns bigint language sql as $$
     insert into net._chamadas_teste (url, body, headers) values (url, body, headers) returning id
   $$;
+  create schema cron;
+  create table cron._jobs_teste (nome text primary key, agenda text, comando text);
+  create function cron.schedule(nome text, agenda text, comando text) returns bigint language sql as $$
+    insert into cron._jobs_teste values (nome, agenda, comando) on conflict (nome) do update set agenda = excluded.agenda returning 1::bigint
+  $$;
   create schema vault;
   create table vault.decrypted_secrets (name text primary key, decrypted_secret text);
 `
 
-// "create extension pg_net" não roda no PGlite; a imitação acima ocupa o lugar.
+// pg_net e pg_cron não rodam no PGlite; as imitações acima ocupam o lugar.
 function adaptarParaPglite(sql) {
-  return sql.replace(/create extension if not exists pg_net[^;]*;/gi, '-- (pg_net imitado no PGlite)')
+  return sql
+    .replace(/create extension if not exists pg_net[^;]*;/gi, '-- (pg_net imitado no PGlite)')
+    .replace(/create extension if not exists pg_cron[^;]*;/gi, '-- (pg_cron imitado no PGlite)')
 }
 
 // Privilégios padrão que o Supabase concede em public quando "Automatically expose

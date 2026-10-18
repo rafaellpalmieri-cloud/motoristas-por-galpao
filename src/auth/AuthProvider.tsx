@@ -76,6 +76,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     staleTime: 5 * 60 * 1000,
   })
 
+  useEffect(() => {
+    if (userId) supabase.rpc('registrar_acesso').then(() => undefined)
+  }, [userId])
+
   const valor: AuthContexto = {
     session,
     carregandoSessao,
