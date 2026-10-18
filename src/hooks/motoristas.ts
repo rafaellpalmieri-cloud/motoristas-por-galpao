@@ -6,7 +6,7 @@ import { supabase } from '../lib/supabase'
 import type { Historico, Motorista, Status } from '../lib/tipos'
 
 const CAMPOS_MOTORISTA =
-  'id, codigo, nome_completo, celular, placa, modal, galpao, status, inativo_desde, motivo_inativacao, atualizado_em, atualizado_por'
+  'id, codigo, nome_completo, celular, placa, modal, galpao, status, inativo_desde, motivo_inativacao, atualizado_em, atualizado_por, cpf, realizou_rotas, qtd_rotas, ultima_rota'
 
 // A RLS já limita aos galpões do usuário; aqui só buscamos tudo o que ele pode ver.
 export function useMotoristas() {

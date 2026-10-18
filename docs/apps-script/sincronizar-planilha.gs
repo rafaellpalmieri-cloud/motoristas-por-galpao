@@ -13,8 +13,8 @@
  *                          só funciona depois de Implantar → App da Web.
  *
  * Segurança:
- *  - Só as colunas da lista COLUNAS saem da planilha. CPF, RG e endereço
- *    NUNCA são lidos nem enviados (mesmo que existam na aba).
+ *  - Só as colunas da lista COLUNAS saem da planilha. RG e endereço NUNCA
+ *    são lidos nem enviados. O CPF é enviado só da aba ATIVOS (cadastro).
  *  - O token fica nas Propriedades do script (não neste código).
  */
 
@@ -36,10 +36,14 @@ const COLUNAS = {
   modal: ['modal'],
   data: ['data_inativacao', 'data_de_inativacao', 'inativo_desde', 'data_inativo', 'data_saida', 'data_desligamento', 'data'],
   motivo: ['motivo', 'motivo_inativacao', 'motivo_da_inativacao'],
+  cpf: ['cpf'],
+  realizou_rotas: ['realizou_rotas', 'fez_rota', 'fez_rotas'],
+  qtd_rotas: ['qntd_rotas', 'qtd_rotas', 'quantidade_rotas', 'quantidade_de_rotas'],
+  ultima_rota: ['ultima_rota', 'data_ultima_rota'],
 };
 
 // Colunas que jamais podem ser lidas ou enviadas.
-const PROIBIDAS = /cpf|rg|endereco|logradouro|cep|bairro/;
+const PROIBIDAS = /^rg$|_rg$|^rg_|endereco|logradouro|cep|bairro/;
 
 function normalizar_(texto) {
   return String(texto || '')
@@ -122,7 +126,8 @@ function sincronizarAtivos() {
     console.log('Aba ATIVOS sem coluna "codigo": rode preencherCodigos primeiro. Pulando ATIVOS.');
     return;
   }
-  const linhas = lerLinhas_(aba, pos, ['codigo', 'nome_completo', 'celular', 'placa', 'galpao', 'modal'])
+  const linhas = lerLinhas_(aba, pos, ['codigo', 'nome_completo', 'celular', 'placa', 'galpao', 'modal',
+                                       'cpf', 'realizou_rotas', 'qtd_rotas', 'ultima_rota'])
     .filter(function (l) { return l.codigo; });
   const total = { novos: 0, atualizados: 0, erros: 0, sem_codigo: aba.getLastRow() - 1 - linhas.length };
   const exemplosErro = [];

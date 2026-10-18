@@ -12,6 +12,9 @@ export const COLUNAS_CSV = [
   'inativo_desde',
 ] as const
 
+/** Colunas aceitas, mas não obrigatórias (não geram aviso se faltarem). */
+export const COLUNAS_OPCIONAIS_CSV = ['cpf', 'realizou_rotas', 'qtd_rotas', 'ultima_rota'] as const
+
 export interface LinhaImportacao {
   linha: number // número da linha no arquivo (cabeçalho = 1)
   codigo: string
@@ -22,6 +25,10 @@ export interface LinhaImportacao {
   status: string
   modal: string
   inativo_desde: string
+  cpf: string
+  realizou_rotas: string
+  qtd_rotas: string
+  ultima_rota: string
 }
 
 export interface ErroLinha {
@@ -70,6 +77,10 @@ export function lerCsvMotoristas(arquivo: File): Promise<ResultadoLeitura> {
             status: limpar(bruta.status).toLowerCase(),
             modal: limpar(bruta.modal),
             inativo_desde: limpar(bruta.inativo_desde),
+            cpf: limpar(bruta.cpf),
+            realizou_rotas: limpar(bruta.realizou_rotas),
+            qtd_rotas: limpar(bruta.qtd_rotas),
+            ultima_rota: limpar(bruta.ultima_rota),
           }
 
           const problemas: string[] = []

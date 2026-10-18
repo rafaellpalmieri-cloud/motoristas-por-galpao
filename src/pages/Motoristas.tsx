@@ -8,6 +8,7 @@ import { useMotoristas } from '../hooks/motoristas'
 import { usePendentes } from '../hooks/solicitacoes'
 import { GALPOES, SEM_GALPAO } from '../lib/constantes'
 import { mensagemErro } from '../lib/erros'
+import { DIAS_PARADO, nuncaRodou, parado } from '../lib/rotas'
 import type { Motorista } from '../lib/tipos'
 
 type FiltroStatus = 'todos' | 'ativo' | 'inativo'
@@ -29,6 +30,7 @@ export default function Motoristas() {
   const busca = params.get('q') ?? ''
   const buscaAdiada = useDeferredValue(busca)
   const status = (params.get('status') as FiltroStatus) || 'todos'
+  const rota = params.get('rota') ?? ''
   const galpao = params.get('galpao') ?? ''
 
   function definir(chave: string, valor: string) {
@@ -65,15 +67,20 @@ export default function Motoristas() {
   const filtrados = useMemo(() => {
     const termo = semAcento(buscaAdiada.trim())
     const termoPlaca = termo.replace(/[^a-z0-9]/g, '')
+    // Busca por CPF só quando o termo é numérico (com ou sem pontos/traço).
+    const termoCpf = /^[\d.\-\s]{4,}$/.test(termo) ? termo.replace(/\D/g, '') : ''
     return doGalpao.filter((m) => {
       if (status !== 'todos' && m.status !== status) return false
+      if (rota === 'nunca' && !nuncaRodou(m)) return false
+      if (rota === 'parado' && !parado(m)) return false
       if (!termo) return true
       return (
         semAcento(m.nome_completo ?? '').includes(termo) ||
-        (!!termoPlaca && semAcento(m.placa ?? '').replace(/[^a-z0-9]/g, '').includes(termoPlaca))
+        (!!termoPlaca && semAcento(m.placa ?? '').replace(/[^a-z0-9]/g, '').includes(termoPlaca)) ||
+        (!!termoCpf && (m.cpf ?? '').includes(termoCpf))
       )
     })
-  }, [doGalpao, buscaAdiada, status])
+  }, [doGalpao, buscaAdiada, status, rota])
 
   function ehNovo(m: Motorista) {
     return (
@@ -88,8 +95,8 @@ export default function Motoristas() {
           type="search"
           value={busca}
           onChange={(e) => definir('q', e.target.value)}
-          placeholder="Buscar por nome ou placa"
-          aria-label="Buscar por nome ou placa"
+          placeholder="Buscar por nome, placa ou CPF"
+          aria-label="Buscar por nome, placa ou CPF"
           className="min-h-12 w-full rounded-xl border border-slate-300 bg-white px-4 text-base focus:border-sky-600 focus:outline-none focus:ring-2 focus:ring-sky-200"
         />
         <div className="flex gap-2">
@@ -129,6 +136,16 @@ export default function Motoristas() {
             </select>
           )}
         </div>
+        <select
+          value={rota}
+          onChange={(e) => definir('rota', e.target.value)}
+          aria-label="Filtrar por rotas"
+          className="min-h-11 rounded-xl border border-slate-300 bg-white px-3 text-sm font-medium"
+        >
+          <option value="">Rotas: todos</option>
+          <option value="nunca">Nunca fez rota</option>
+          <option value="parado">Sem rota há {DIAS_PARADO}+ dias</option>
+        </select>
         {data && (
           <div className="flex gap-2 text-sm">
             <span className="rounded-full bg-emerald-100 px-3 py-1 font-semibold text-emerald-800">{contagem.ativos} ativos</span>

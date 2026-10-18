@@ -7,6 +7,7 @@ import { useHistorico, useMotorista } from '../hooks/motoristas'
 import { useSolicitacoesDoMotorista } from '../hooks/solicitacoes'
 import { formatarData, formatarDataHora } from '../lib/datas'
 import { mensagemErro } from '../lib/erros'
+import { formatarCpf } from '../lib/rotas'
 import { formatarCelular, linkTelefone, linkWhatsApp } from '../lib/telefone'
 import type { Motorista } from '../lib/tipos'
 
@@ -72,6 +73,10 @@ export default function MotoristaDetalhe() {
           <Linha rotulo="Modal">{m.modal}</Linha>
           <Linha rotulo="Galpão">{m.galpao ?? 'Sem galpão'}</Linha>
           <Linha rotulo="Celular">{formatarCelular(m.celular)}</Linha>
+          <Linha rotulo="CPF">{formatarCpf(m.cpf)}</Linha>
+          <Linha rotulo="Fez rota?">{m.realizou_rotas == null ? '' : m.realizou_rotas ? 'Sim' : 'Não'}</Linha>
+          <Linha rotulo="Qtd. de rotas">{m.qtd_rotas != null ? String(m.qtd_rotas) : ''}</Linha>
+          <Linha rotulo="Última rota">{formatarData(m.ultima_rota)}</Linha>
           {m.status === 'inativo' && <Linha rotulo="Inativo desde">{formatarData(m.inativo_desde)}</Linha>}
           {m.status === 'inativo' && <Linha rotulo="Motivo">{m.motivo_inativacao}</Linha>}
         </dl>

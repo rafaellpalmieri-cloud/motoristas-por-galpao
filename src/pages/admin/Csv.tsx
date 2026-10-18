@@ -2,7 +2,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { useRef, useState } from 'react'
 import { useToast } from '../../components/Toast'
 import { Botao, Cartao, Pagina } from '../../components/ui'
-import { baixarCsv, COLUNAS_CSV, lerCsvMotoristas, type ErroLinha, type ResultadoLeitura } from '../../lib/csv'
+import { baixarCsv, COLUNAS_CSV, COLUNAS_OPCIONAIS_CSV,lerCsvMotoristas, type ErroLinha, type ResultadoLeitura } from '../../lib/csv'
 import { formatarData, formatarDataHora } from '../../lib/datas'
 import { mensagemErro } from '../../lib/erros'
 import { buscarTodas } from '../../lib/paginacao'
@@ -80,7 +80,8 @@ function Importar() {
     <Cartao className="mb-6">
       <h2 className="text-lg font-bold text-slate-900">Importar CSV</h2>
       <p className="mt-1 text-sm text-slate-600">
-        Colunas: <code className="text-xs">{COLUNAS_CSV.join(', ')}</code>. Separador vírgula ou ponto e vírgula. Motoristas que já
+        Colunas: <code className="text-xs">{COLUNAS_CSV.join(', ')}</code> (opcionais:{' '}
+        <code className="text-xs">{COLUNAS_OPCIONAIS_CSV.join(', ')}</code>). Separador vírgula ou ponto e vírgula. Motoristas que já
         existem (mesmo código) têm nome, celular, placa, modal e galpão atualizados; o <strong>status não é alterado</strong>.
       </p>
 
@@ -209,6 +210,10 @@ interface LinhaExport {
   status: string
   inativo_desde: string | null
   motivo_inativacao: string | null
+  cpf: string | null
+  realizou_rotas: boolean | null
+  qtd_rotas: number | null
+  ultima_rota: string | null
   atualizado_em: string | null
   atualizado_por_nome: string | null
 }
@@ -227,12 +232,15 @@ function Exportar() {
         ...d,
         inativo_desde: formatarData(d.inativo_desde),
         ultima_alteracao_em: formatarDataHora(d.atualizado_em),
+        realizou_rotas: d.realizou_rotas == null ? '' : d.realizou_rotas ? 'SIM' : 'NÃO',
+        ultima_rota: formatarData(d.ultima_rota),
         ultima_alteracao_por: d.atualizado_por_nome ?? '',
       }))
       const hoje = new Date().toLocaleDateString('sv-SE', { timeZone: 'America/Sao_Paulo' })
       baixarCsv(`motoristas-${hoje}.csv`, linhas, [
         'codigo',
         'nome_completo',
+        'cpf',
         'celular',
         'placa',
         'galpao',
@@ -240,6 +248,9 @@ function Exportar() {
         'modal',
         'inativo_desde',
         'motivo_inativacao',
+        'realizou_rotas',
+        'qtd_rotas',
+        'ultima_rota',
         'ultima_alteracao_em',
         'ultima_alteracao_por',
       ])

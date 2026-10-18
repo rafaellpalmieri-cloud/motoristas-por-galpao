@@ -826,6 +826,70 @@ $$;
 
 reset role;
 
+-- =====================================================================
+-- 12. CPF e rotas (aba ATIVOS) e visibilidade por galpão
+-- =====================================================================
+select set_config('request.jwt.claims', '{"role":"service_role"}', true);
+set local role service_role;
+
+do $$
+declare r jsonb;
+begin
+  -- CPF sem o zero à esquerda (como a planilha costuma mandar) e rotas.
+  r := public.sincronizar_ativos_planilha('[
+    {"linha":2,"codigo":"TESTE-SRJ2","nome_completo":"Motorista Ficticio Dois","placa":"TST0002","galpao":"SRJ2",
+     "cpf":"1234567890","realizou_rotas":"SIM","qtd_rotas":"42","ultima_rota":"15/10/2026"},
+    {"linha":3,"codigo":"TESTE-PLAN","nome_completo":"Novo Pela Planilha","placa":"TST0555","galpao":"HUB",
+     "cpf":"abc","realizou_rotas":"NÃO","qtd_rotas":"0","ultima_rota":""}
+  ]'::jsonb);
+  if jsonb_array_length(r -> 'erros') <> 0 then raise exception 'FALHOU: erros inesperados: %', r; end if;
+
+  if not exists (select 1 from public.motoristas where codigo = 'TESTE-SRJ2' and cpf = '01234567890'
+                 and realizou_rotas and qtd_rotas = 42 and ultima_rota = date '2026-10-15') then
+    raise exception 'FALHOU: CPF/rotas não gravados corretamente';
+  end if;
+  if not exists (select 1 from public.motoristas where codigo = 'TESTE-PLAN' and cpf is null
+                 and realizou_rotas = false and qtd_rotas = 0) then
+    raise exception 'FALHOU: CPF inválido não virou nulo ou rotas erradas';
+  end if;
+  raise notice 'OK: aba ATIVOS grava CPF (completa zero à esquerda) e dados de rota';
+
+  -- Linha sem os campos novos não apaga o que já existe.
+  perform public.sincronizar_ativos_planilha('[{"linha":2,"codigo":"TESTE-SRJ2","nome_completo":"Motorista Ficticio Dois","placa":"TST0002","galpao":"SRJ2"}]'::jsonb);
+  if not exists (select 1 from public.motoristas where codigo = 'TESTE-SRJ2' and cpf = '01234567890' and qtd_rotas = 42) then
+    raise exception 'FALHOU: atualização sem CPF apagou o CPF existente';
+  end if;
+  raise notice 'OK: atualização sem CPF/rotas mantém os valores existentes';
+end;
+$$;
+
+reset role;
+
+-- Dispatcher SRJ1 não vê o CPF de motorista do SRJ2; SRJ2 vê.
+select set_config('request.jwt.claims', '{"sub":"00000000-0000-4000-a000-000000000002","role":"authenticated"}', true);
+set local role authenticated;
+do $$
+begin
+  if exists (select 1 from public.motoristas where cpf = '01234567890') then
+    raise exception 'FALHOU: dispatcher SRJ1 leu CPF de motorista do SRJ2';
+  end if;
+  raise notice 'OK: dispatcher não vê CPF de outro galpão';
+end;
+$$;
+reset role;
+
+select set_config('request.jwt.claims', '{"sub":"00000000-0000-4000-a000-000000000003","role":"authenticated"}', true);
+set local role authenticated;
+do $$
+begin
+  if not exists (select 1 from public.motoristas where codigo = 'TESTE-SRJ2' and cpf = '01234567890') then
+    raise exception 'FALHOU: dispatcher do galpão não vê o CPF';
+  end if;
+  raise notice 'OK: dispatcher vê o CPF dos motoristas do seu galpão';
+end;
+$$;
+reset role;
+
 do $$ begin raise notice '=== TODOS OS TESTES PASSARAM ==='; end $$;
 
 rollback;

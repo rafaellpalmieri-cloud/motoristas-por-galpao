@@ -1,5 +1,6 @@
 import { Link, useNavigate } from 'react-router-dom'
 import { formatarData } from '../lib/datas'
+import { diasDesdeUltimaRota, nuncaRodou, parado } from '../lib/rotas'
 import { formatarCelular, linkTelefone, linkWhatsApp } from '../lib/telefone'
 import type { Motorista, Solicitacao } from '../lib/tipos'
 import { BadgeStatus, Botao } from './ui'
@@ -50,6 +51,8 @@ export function CardMotorista({
         </div>
       </div>
 
+      <LinhaRotas motorista={motorista} />
+
       {!ativo && (motorista.inativo_desde || motorista.motivo_inativacao) && (
         <p className="mt-2 text-sm text-rose-700">
           Inativado{motorista.inativo_desde ? ` em ${formatarData(motorista.inativo_desde)}` : ''}
@@ -94,5 +97,25 @@ export function CardMotorista({
         )}
       </div>
     </li>
+  )
+}
+
+/** Resumo das rotas vindo da planilha: destaca quem nunca rodou ou está parado. */
+function LinhaRotas({ motorista }: { motorista: Motorista }) {
+  if (nuncaRodou(motorista)) {
+    return (
+      <p className="mt-2">
+        <span className="rounded-full bg-orange-100 px-2.5 py-0.5 text-sm font-semibold text-orange-800">Nunca fez rota</span>
+      </p>
+    )
+  }
+  if (motorista.qtd_rotas == null && !motorista.ultima_rota) return null
+  const dias = diasDesdeUltimaRota(motorista.ultima_rota)
+  return (
+    <p className={`mt-2 text-sm ${parado(motorista) ? 'font-semibold text-amber-800' : 'text-slate-600'}`}>
+      {motorista.qtd_rotas != null ? `${motorista.qtd_rotas} rota(s)` : 'Rotas'}
+      {motorista.ultima_rota ? ` · última em ${formatarData(motorista.ultima_rota)}` : ''}
+      {dias !== null && parado(motorista) ? ` (parado há ${dias} dias)` : ''}
+    </p>
   )
 }

@@ -14,6 +14,10 @@ export interface Motorista {
   motivo_inativacao: string | null
   atualizado_em: string
   atualizado_por: string | null
+  cpf: string | null
+  realizou_rotas: boolean | null
+  qtd_rotas: number | null
+  ultima_rota: string | null
 }
 
 export interface Historico {

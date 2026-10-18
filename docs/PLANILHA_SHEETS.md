@@ -14,7 +14,7 @@ Planilha ──Apps Script, a cada 15 min──▶ Edge Function sincronizar-pla
 
 ## Regras importantes
 
-- **CPF, RG e endereço nunca saem da planilha.** O script lê coluna por coluna e só as permitidas: código, nome, celular, placa, galpão, modal, data e motivo. A Edge Function também descarta qualquer outro campo.
+- **RG e endereço nunca saem da planilha.** O script lê coluna por coluna e só as permitidas: código, nome, celular, placa, galpão, modal, data e motivo, e, **só da aba ATIVOS**, CPF, "Realizou rotas", "Qntd rotas" e "Ultima Rota". A Edge Function descarta qualquer outro campo, e o CPF de linhas da aba INATIVOS.
 - **O código é o que identifica o motorista.** Na aba ATIVOS, só linhas **com código** são enviadas. Na aba INATIVOS, o app procura pelo código; se não houver código, procura pela placa e depois pelo celular.
 - **Cada linha da aba INATIVOS é aplicada uma única vez.** Se um dispatcher reativar o motorista no app, a mesma linha não o inativa de novo.
 - **Inativações antigas não disparam alerta de "novo".** O histórico usa a data da planilha.
@@ -60,6 +60,10 @@ O script encontra as colunas pelo **nome do cabeçalho**, sem diferenciar maiús
 | modal | `modal` |
 | data da inativação (INATIVOS) | `data_inativacao`, `data de inativação`, `inativo_desde`, `data_saida`, `data_desligamento`, `data` |
 | motivo (INATIVOS) | `motivo`, `motivo_inativacao`, `motivo da inativação` |
+| CPF (ATIVOS) | `cpf` (zeros à esquerda perdidos pela planilha são completados) |
+| fez rota (ATIVOS) | `realizou_rotas`, `Realizou rotas` (SIM/NÃO) |
+| quantidade de rotas (ATIVOS) | `Qntd rotas`, `qtd_rotas`, `quantidade_rotas` |
+| última rota (ATIVOS) | `Ultima Rota`, `data_ultima_rota` |
 
 ## Problemas comuns
 

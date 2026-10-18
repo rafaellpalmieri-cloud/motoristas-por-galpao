@@ -6,11 +6,13 @@
 // Autenticação: cabeçalho "x-sync-token" igual ao secret PLANILHA_SYNC_TOKEN.
 // (Apps Script não tem JWT do Supabase, por isso verify_jwt = false.)
 //
-// Só os campos da lista abaixo são repassados ao banco. Qualquer outro
-// (CPF, RG, endereço...) é descartado aqui, mesmo que venha por engano.
+// Só os campos das listas abaixo são repassados ao banco. Qualquer outro
+// (RG, endereço...) é descartado aqui, mesmo que venha por engano.
+// CPF e dados de rota só são aceitos na aba ATIVOS (cadastro do motorista).
 import { createClient } from 'npm:@supabase/supabase-js@2'
 
-const CAMPOS = ['linha', 'codigo', 'nome_completo', 'celular', 'placa', 'galpao', 'modal', 'data', 'motivo'] as const
+const CAMPOS_BASE = ['linha', 'codigo', 'nome_completo', 'celular', 'placa', 'galpao', 'modal', 'data', 'motivo']
+const CAMPOS_ATIVOS = [...CAMPOS_BASE, 'cpf', 'realizou_rotas', 'qtd_rotas', 'ultima_rota']
 
 const FUNCOES = {
   inativos: 'sincronizar_inativos_planilha',
@@ -57,7 +59,7 @@ Deno.serve(async (req) => {
   const linhas = corpo.linhas.map((bruta) => {
     const l = (bruta ?? {}) as Record<string, unknown>
     const limpa: Record<string, string> = {}
-    for (const c of CAMPOS) {
+    for (const c of acao === 'ativos' ? CAMPOS_ATIVOS : CAMPOS_BASE) {
       const v = l[c]
       if (v !== undefined && v !== null) limpa[c] = String(v).slice(0, 200)
     }
