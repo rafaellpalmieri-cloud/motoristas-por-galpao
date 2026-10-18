@@ -17,7 +17,8 @@
  *
  * Segurança:
  *  - Só as colunas da lista COLUNAS saem da planilha. RG e endereço NUNCA
- *    são lidos nem enviados. O CPF é enviado só da aba ATIVOS (cadastro).
+ *    são lidos nem enviados. CPF e rotas vão das duas abas (na INATIVOS,
+ *    só para completar o cadastro, sem mudar status).
  *  - O token fica nas Propriedades do script (não neste código).
  */
 
@@ -167,6 +168,20 @@ function sincronizarInativos() {
   });
   console.log('INATIVOS: ' + JSON.stringify(total) +
     (ambiguos.length ? '\n  Placa repetida sem desempate (preencha o código): linhas ' + ambiguos.join(', ') : ''));
+
+  // CPF e rotas de quem está na aba INATIVOS (só completa o cadastro).
+  if (pos.cpf !== undefined || pos.qtd_rotas !== undefined || pos.realizou_rotas !== undefined || pos.ultima_rota !== undefined) {
+    const complemento = lerLinhas_(aba, pos, ['codigo', 'nome_completo', 'celular', 'placa', 'cpf', 'realizou_rotas', 'qtd_rotas', 'ultima_rota'])
+      .filter(function (l) { return (l.codigo || l.placa || l.celular) && (l.cpf || l.qtd_rotas || l.realizou_rotas || l.ultima_rota); });
+    const soma = { atualizados: 0, nao_encontrados: 0, ambiguos: 0, erros: 0 };
+    enviar_('complemento', complemento).forEach(function (r) {
+      soma.atualizados += r.atualizados;
+      soma.nao_encontrados += r.nao_encontrados;
+      soma.ambiguos += r.ambiguos;
+      soma.erros += (r.erros || []).length;
+    });
+    console.log('INATIVOS (CPF/rotas): ' + JSON.stringify(soma));
+  }
 }
 
 /** Executado pelo gatilho: primeiro ATIVOS (novos entram), depois INATIVOS. */

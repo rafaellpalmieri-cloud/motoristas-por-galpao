@@ -1241,6 +1241,51 @@ begin
 end;
 $$;
 
+-- =====================================================================
+-- 17. CPF e rotas pela aba INATIVOS (só completa dados)
+-- =====================================================================
+select set_config('request.jwt.claims', '{"sub":"00000000-0000-4000-a000-000000000001","role":"authenticated"}', true);
+set local role authenticated;
+do $$
+begin
+  begin
+    perform public.atualizar_complemento_planilha('[]'::jsonb);
+    raise exception 'FALHOU: usuário logado chamou atualizar_complemento_planilha';
+  exception when insufficient_privilege then raise notice 'OK: complemento da planilha não pode ser chamado pelo app';
+  end;
+end;
+$$;
+reset role;
+
+select set_config('request.jwt.claims', '{"role":"service_role"}', true);
+set local role service_role;
+do $$
+declare r jsonb; v_hist integer;
+begin
+  select count(*) into v_hist from public.motorista_historico;
+  -- TESTE-AMB1 está inativo (seção 13).
+  r := public.atualizar_complemento_planilha('[
+    {"linha":2,"codigo":"TESTE-AMB1","cpf":"55566677788","realizou_rotas":"SIM","qtd_rotas":"7","ultima_rota":"01/08/2026"},
+    {"linha":3,"codigo":"","placa":"AMB1C23","celular":"","nome_completo":"","cpf":"11111111111"},
+    {"linha":4,"codigo":"NAO-EXISTE","cpf":"22222222222"},
+    {"linha":5,"codigo":"TESTE-AMB2"}
+  ]'::jsonb);
+  if (r ->> 'atualizados')::int <> 1 or (r ->> 'ambiguos')::int <> 1 or (r ->> 'nao_encontrados')::int <> 1
+     or (r ->> 'sem_dados')::int <> 1 then
+    raise exception 'FALHOU: resultado inesperado do complemento: %', r;
+  end if;
+  if not exists (select 1 from public.motoristas where codigo = 'TESTE-AMB1' and status = 'inativo'
+                 and cpf = '55566677788' and qtd_rotas = 7 and ultima_rota = date '2026-08-01') then
+    raise exception 'FALHOU: complemento não gravou CPF/rotas ou mudou o status';
+  end if;
+  if (select count(*) from public.motorista_historico) <> v_hist then
+    raise exception 'FALHOU: complemento gerou histórico';
+  end if;
+  raise notice 'OK: aba INATIVOS completa CPF e rotas sem mudar status nem gerar histórico';
+end;
+$$;
+reset role;
+
 do $$ begin raise notice '=== TODOS OS TESTES PASSARAM ==='; end $$;
 
 rollback;

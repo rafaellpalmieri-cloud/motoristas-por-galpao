@@ -2,6 +2,7 @@
 //  - acao "inativos" (padrão): linhas da aba INATIVOS → inativa quem ainda está ativo (gera alerta);
 //  - acao "ativos": linhas da aba ATIVOS → cadastra novos e atualiza dados (nunca muda status);
 //  - acao "buscar_codigos": { linha, placa, celular } → devolve o código do app (preenchimento único);
+//  - acao "complemento": CPF e dados de rota da aba INATIVOS (não muda status);
 //  - acao "backup": devolve motoristas, histórico, pedidos e equipe (cópia semanal no Google Drive).
 //
 // Autenticação: cabeçalho "x-sync-token" igual ao secret PLANILHA_SYNC_TOKEN.
@@ -9,7 +10,7 @@
 //
 // Só os campos das listas abaixo são repassados ao banco. Qualquer outro
 // (RG, endereço...) é descartado aqui, mesmo que venha por engano.
-// CPF e dados de rota só são aceitos na aba ATIVOS (cadastro do motorista).
+// CPF e dados de rota só são aceitos nas ações "ativos" e "complemento".
 import { createClient, type SupabaseClient } from 'npm:@supabase/supabase-js@2'
 
 const CAMPOS_BASE = ['linha', 'codigo', 'nome_completo', 'celular', 'placa', 'galpao', 'modal', 'data', 'motivo']
@@ -19,6 +20,7 @@ const FUNCOES = {
   inativos: 'sincronizar_inativos_planilha',
   ativos: 'sincronizar_ativos_planilha',
   buscar_codigos: 'buscar_codigos_planilha',
+  complemento: 'atualizar_complemento_planilha',
 } as const
 
 function json(corpo: unknown, status = 200): Response {
@@ -67,7 +69,7 @@ Deno.serve(async (req) => {
   const linhas = corpo.linhas.map((bruta) => {
     const l = (bruta ?? {}) as Record<string, unknown>
     const limpa: Record<string, string> = {}
-    for (const c of acao === 'ativos' ? CAMPOS_ATIVOS : CAMPOS_BASE) {
+    for (const c of acao === 'ativos' || acao === 'complemento' ? CAMPOS_ATIVOS : CAMPOS_BASE) {
       const v = l[c]
       if (v !== undefined && v !== null) limpa[c] = String(v).slice(0, 200)
     }
