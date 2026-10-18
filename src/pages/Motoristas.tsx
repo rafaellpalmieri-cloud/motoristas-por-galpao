@@ -8,7 +8,7 @@ import { useCpfsCompletos, useMotoristas } from '../hooks/motoristas'
 import { usePendentes } from '../hooks/solicitacoes'
 import { GALPOES, SEM_GALPAO } from '../lib/constantes'
 import { mensagemErro } from '../lib/erros'
-import { DIAS_PARADO, nuncaRodou, parado } from '../lib/rotas'
+import { DIAS_PARADO, formatarCpf, nuncaRodou, parado } from '../lib/rotas'
 import type { Motorista } from '../lib/tipos'
 
 type FiltroStatus = 'todos' | 'ativo' | 'inativo'
@@ -106,6 +106,16 @@ export default function Motoristas() {
     return lista
   }, [filtrados, porPessoa])
 
+  // Admin vê o CPF completo; dispatcher, o mascarado.
+  function cpfDaPessoa(placas: Motorista[]): string | null {
+    for (const p of placas) {
+      const completo = cpfsCompletos?.get(p.id)
+      if (completo) return formatarCpf(completo)
+      if (p.cpf_mascarado) return p.cpf_mascarado
+    }
+    return null
+  }
+
   function ehNovo(m: Motorista) {
     return (
       m.status === 'inativo' && !!vistosEm && m.atualizado_em > vistosEm && m.atualizado_por !== session?.user.id
@@ -199,6 +209,7 @@ export default function Motoristas() {
                 novos={new Set(placas.filter(ehNovo).map((p) => p.id))}
                 mostrarGalpao={mostrarFiltroGalpao}
                 pendentes={pendentePorMotorista}
+                cpf={cpfDaPessoa(placas)}
                 aoAlterarStatus={setAlvo}
               />
             ))}

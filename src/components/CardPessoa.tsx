@@ -15,9 +15,12 @@ export function CardPessoa({
   novos,
   mostrarGalpao,
   pendentes,
+  cpf,
   aoAlterarStatus,
 }: {
   placas: Motorista[]
+  /** CPF já formatado: completo para admin, mascarado para dispatcher. */
+  cpf: string | null
   novos: Set<string>
   mostrarGalpao: boolean
   pendentes: Map<string, Solicitacao>
@@ -41,11 +44,11 @@ export function CardPessoa({
           <p className={`truncate text-lg font-semibold ${algumaAtiva ? 'text-slate-900' : 'text-slate-500'}`}>
             {principal.nome_completo || '(sem nome)'}
           </p>
-          {varias && (
-            <p className="text-sm text-slate-500">
-              {placas.length} placas · {ativas.length} ativa(s)
-            </p>
-          )}
+          <p className="text-sm text-slate-500">
+            {[cpf ? `CPF ${cpf}` : 'Sem CPF', varias ? `${placas.length} placas · ${ativas.length} ativa(s)` : null]
+              .filter(Boolean)
+              .join(' · ')}
+          </p>
         </Link>
         {!varias && <BadgeStatus status={principal.status} />}
       </div>
