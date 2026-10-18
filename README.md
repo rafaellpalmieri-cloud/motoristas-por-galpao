@@ -188,7 +188,7 @@ A exportação gera um CSV em UTF-8 com BOM e separador `;`, que abre direto no 
 - O dispatcher **não** consegue alterar motoristas diretamente: a mudança passa por `alterar_status_motorista`, que confere a permissão, trava a linha e grava o histórico na mesma transação.
 - Os papéis ficam em `user_roles`, separados do perfil. Só o admin gerencia papéis e galpões.
 - Usuário desativado perde o acesso aos dados na hora (pela RLS) e não consegue mais fazer login (bloqueio no Auth).
-- **CPF:** por decisão do responsável pelo app (18/10/2026), o CPF dos motoristas é guardado e exibido completo para admin e para os dispatchers do galpão do motorista (mesma regra de visibilidade dos motoristas). Ele não vai para mensagens de WhatsApp nem para a aba de movimentações. **RG e endereço continuam fora do app.**
+- **CPF:** por decisão do responsável pelo app (18/10/2026), o CPF dos motoristas é guardado. O **admin** vê o CPF completo; o **dispatcher** vê só o CPF **mascarado** (`***.456.789-**`) dos motoristas do seu galpão. O mascaramento é feito no banco (privilégio por coluna): o dispatcher nem recebe o número completo. Ele não vai para mensagens de WhatsApp nem para a aba de movimentações. **RG e endereço continuam fora do app.**
 - Dados de rota (fez rota, quantidade e última rota) mostram no card quem **nunca fez rota** ou está **parado há 30+ dias**, com filtro na lista.
 - Não versione dados reais de motoristas: o CSV real é importado pela tela de admin.
 

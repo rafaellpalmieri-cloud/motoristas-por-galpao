@@ -3,7 +3,8 @@ import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { ModalStatus } from '../components/ModalStatus'
 import { BadgeStatus, Botao, Carregando, Cartao, EstadoErro, EstadoVazio, Pagina, SeloPlanilha } from '../components/ui'
 import { CartaoSolicitacao } from '../components/CartaoSolicitacao'
-import { useHistorico, useMotorista } from '../hooks/motoristas'
+import { useAuth } from '../auth/AuthProvider'
+import { useCpfCompleto, useHistorico, useMotorista } from '../hooks/motoristas'
 import { useSolicitacoesDoMotorista } from '../hooks/solicitacoes'
 import { formatarData, formatarDataHora } from '../lib/datas'
 import { mensagemErro } from '../lib/erros'
@@ -27,6 +28,8 @@ export default function MotoristaDetalhe() {
   const motorista = useMotorista(id)
   const historico = useHistorico(id)
   const solicitacoes = useSolicitacoesDoMotorista(id)
+  const { ehAdmin } = useAuth()
+  const cpfCompleto = useCpfCompleto(id, ehAdmin)
   const [selecionado, setSelecionado] = useState<Motorista | null>(null)
 
   const voltar = (
@@ -73,7 +76,7 @@ export default function MotoristaDetalhe() {
           <Linha rotulo="Modal">{m.modal}</Linha>
           <Linha rotulo="Galpão">{m.galpao ?? 'Sem galpão'}</Linha>
           <Linha rotulo="Celular">{formatarCelular(m.celular)}</Linha>
-          <Linha rotulo="CPF">{formatarCpf(m.cpf)}</Linha>
+          <Linha rotulo="CPF">{ehAdmin && cpfCompleto.data ? formatarCpf(cpfCompleto.data) : m.cpf_mascarado}</Linha>
           <Linha rotulo="Fez rota?">{m.realizou_rotas == null ? '' : m.realizou_rotas ? 'Sim' : 'Não'}</Linha>
           <Linha rotulo="Qtd. de rotas">{m.qtd_rotas != null ? String(m.qtd_rotas) : ''}</Linha>
           <Linha rotulo="Última rota">{formatarData(m.ultima_rota)}</Linha>

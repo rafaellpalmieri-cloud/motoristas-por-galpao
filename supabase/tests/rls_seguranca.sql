@@ -614,6 +614,8 @@ begin
   -- Admin promove outro usuário a admin (mesmo caminho da Edge Function).
   insert into public.user_roles (user_id, role) values ('00000000-0000-4000-a000-000000000003', 'admin');
   raise notice 'OK: admin pode criar outro admin';
+  -- Desfaz para os testes seguintes (SRJ2 volta a ser só dispatcher).
+  delete from public.user_roles where user_id = '00000000-0000-4000-a000-000000000003' and role = 'admin';
 end;
 $$;
 
@@ -865,15 +867,15 @@ $$;
 
 reset role;
 
--- Dispatcher SRJ1 não vê o CPF de motorista do SRJ2; SRJ2 vê.
+-- Dispatcher: só CPF mascarado, e só do seu galpão. Admin: completo.
 select set_config('request.jwt.claims', '{"sub":"00000000-0000-4000-a000-000000000002","role":"authenticated"}', true);
 set local role authenticated;
 do $$
 begin
-  if exists (select 1 from public.motoristas where cpf = '01234567890') then
-    raise exception 'FALHOU: dispatcher SRJ1 leu CPF de motorista do SRJ2';
+  if exists (select 1 from public.motoristas where codigo = 'TESTE-SRJ2') then
+    raise exception 'FALHOU: dispatcher SRJ1 viu motorista do SRJ2';
   end if;
-  raise notice 'OK: dispatcher não vê CPF de outro galpão';
+  raise notice 'OK: dispatcher não vê CPF (nem mascarado) de outro galpão';
 end;
 $$;
 reset role;
@@ -882,10 +884,38 @@ select set_config('request.jwt.claims', '{"sub":"00000000-0000-4000-a000-0000000
 set local role authenticated;
 do $$
 begin
-  if not exists (select 1 from public.motoristas where codigo = 'TESTE-SRJ2' and cpf = '01234567890') then
-    raise exception 'FALHOU: dispatcher do galpão não vê o CPF';
+  if not exists (select 1 from public.motoristas where codigo = 'TESTE-SRJ2' and cpf_mascarado = '***.345.678-**') then
+    raise exception 'FALHOU: dispatcher do galpão não vê o CPF mascarado';
   end if;
-  raise notice 'OK: dispatcher vê o CPF dos motoristas do seu galpão';
+  raise notice 'OK: dispatcher vê o CPF mascarado dos motoristas do seu galpão';
+
+  begin
+    perform cpf from public.motoristas limit 1;
+    raise exception 'FALHOU: dispatcher leu a coluna cpf completa';
+  exception when insufficient_privilege then raise notice 'OK: dispatcher não consegue ler o CPF completo';
+  end;
+
+  begin
+    perform public.cpf_completo('10000000-0000-4000-a000-000000000002');
+    raise exception 'FALHOU: dispatcher obteve CPF completo pela função';
+  exception when insufficient_privilege then raise notice 'OK: função de CPF completo é só para admin';
+  end;
+end;
+$$;
+reset role;
+
+select set_config('request.jwt.claims', '{"sub":"00000000-0000-4000-a000-000000000001","role":"authenticated"}', true);
+set local role authenticated;
+do $$
+begin
+  if public.cpf_completo('10000000-0000-4000-a000-000000000002') is distinct from '01234567890'
+     or not exists (select 1 from public.cpfs_completos() c where c.cpf = '01234567890') then
+    raise exception 'FALHOU: admin não obteve o CPF completo';
+  end if;
+  if not exists (select 1 from public.exportar_motoristas() e where e.cpf = '01234567890') then
+    raise exception 'FALHOU: exportação do admin sem CPF completo';
+  end if;
+  raise notice 'OK: admin vê o CPF completo (tela e exportação)';
 end;
 $$;
 reset role;

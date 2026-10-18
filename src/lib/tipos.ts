@@ -14,7 +14,8 @@ export interface Motorista {
   motivo_inativacao: string | null
   atualizado_em: string
   atualizado_por: string | null
-  cpf: string | null
+  /** CPF mascarado (***.456.789-**). O completo só via cpf_completo (admin). */
+  cpf_mascarado: string | null
   realizou_rotas: boolean | null
   qtd_rotas: number | null
   ultima_rota: string | null

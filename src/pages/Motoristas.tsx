@@ -4,7 +4,7 @@ import { useAuth } from '../auth/AuthProvider'
 import { CardMotorista } from '../components/CardMotorista'
 import { ModalStatus } from '../components/ModalStatus'
 import { Carregando, EstadoErro, EstadoVazio, Pagina } from '../components/ui'
-import { useMotoristas } from '../hooks/motoristas'
+import { useCpfsCompletos, useMotoristas } from '../hooks/motoristas'
 import { usePendentes } from '../hooks/solicitacoes'
 import { GALPOES, SEM_GALPAO } from '../lib/constantes'
 import { mensagemErro } from '../lib/erros'
@@ -22,6 +22,7 @@ export default function Motoristas() {
   const { usuario, ehAdmin, session } = useAuth()
   const { data, isPending, error, refetch } = useMotoristas()
   const { data: pendentes } = usePendentes()
+  const { data: cpfsCompletos } = useCpfsCompletos(ehAdmin)
   const pendentePorMotorista = useMemo(() => new Map((pendentes ?? []).map((s) => [s.motorista_id, s])), [pendentes])
   const [params, setParams] = useSearchParams()
   const [selecionado, setSelecionado] = useState<Motorista | null>(null)
@@ -77,10 +78,11 @@ export default function Motoristas() {
       return (
         semAcento(m.nome_completo ?? '').includes(termo) ||
         (!!termoPlaca && semAcento(m.placa ?? '').replace(/[^a-z0-9]/g, '').includes(termoPlaca)) ||
-        (!!termoCpf && (m.cpf ?? '').includes(termoCpf))
+        (!!termoCpf &&
+          (cpfsCompletos?.get(m.id) ?? (m.cpf_mascarado ?? '').replace(/\D/g, '')).includes(termoCpf))
       )
     })
-  }, [doGalpao, buscaAdiada, status, rota])
+  }, [doGalpao, buscaAdiada, status, rota, cpfsCompletos])
 
   function ehNovo(m: Motorista) {
     return (

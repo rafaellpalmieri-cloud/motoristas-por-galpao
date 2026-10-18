@@ -6,7 +6,7 @@ import { supabase } from '../lib/supabase'
 import type { Historico, Motorista, Status } from '../lib/tipos'
 
 const CAMPOS_MOTORISTA =
-  'id, codigo, nome_completo, celular, placa, modal, galpao, status, inativo_desde, motivo_inativacao, atualizado_em, atualizado_por, cpf, realizou_rotas, qtd_rotas, ultima_rota'
+  'id, codigo, nome_completo, celular, placa, modal, galpao, status, inativo_desde, motivo_inativacao, atualizado_em, atualizado_por, cpf_mascarado, realizou_rotas, qtd_rotas, ultima_rota'
 
 // A RLS já limita aos galpões do usuário; aqui só buscamos tudo o que ele pode ver.
 export function useMotoristas() {
@@ -71,14 +71,13 @@ export function useAlterarStatus() {
 
   return useMutation({
     mutationFn: async ({ motorista, novoStatus, motivo, observacao }: DadosAlteracao) => {
-      const { data, error } = await supabase.rpc('alterar_status_motorista', {
+      const { error } = await supabase.rpc('alterar_status_motorista', {
         p_motorista_id: motorista.id,
         p_novo_status: novoStatus,
         p_motivo: motivo ?? null,
         p_observacao: observacao ?? null,
       })
       if (error) throw error
-      return data as Motorista
     },
     onMutate: async ({ motorista, novoStatus, motivo }) => {
       await queryClient.cancelQueries({ queryKey: ['motoristas'] })
@@ -181,5 +180,33 @@ export function useMarcarAlertasVistos() {
       if (error) throw error
     },
     onSuccess: () => recarregarUsuario(),
+  })
+}
+
+/** CPF completo de todos os motoristas (só admin; usado na busca). */
+export function useCpfsCompletos(ativo: boolean) {
+  return useQuery({
+    queryKey: ['cpfs-completos'],
+    enabled: ativo,
+    staleTime: 5 * 60 * 1000,
+    queryFn: async () => {
+      const lista = await buscarTodas<{ id: string; cpf: string }>((de, ate) =>
+        supabase.rpc('cpfs_completos').range(de, ate),
+      )
+      return new Map(lista.map((c) => [c.id, c.cpf]))
+    },
+  })
+}
+
+/** CPF completo de um motorista (só admin). */
+export function useCpfCompleto(motoristaId: string | undefined, ativo: boolean) {
+  return useQuery({
+    queryKey: ['cpf-completo', motoristaId],
+    enabled: ativo && !!motoristaId,
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc('cpf_completo', { p_motorista_id: motoristaId! })
+      if (error) throw error
+      return (data as string | null) ?? null
+    },
   })
 }
