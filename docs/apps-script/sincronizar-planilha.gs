@@ -344,14 +344,19 @@ function corrigirCodigos_(aplicar) {
     linhas.forEach(function (l) {
       const cpf = cpfNormalizado_(l.cpf);
       let correto = null, como = '';
+      const mesmaPlaca = function (c) { return normalizar_(codigosBackup[c].placa) === normalizar_(l.placa); };
       if (cpf && porCpf[cpf]) {
         // Mesmo CPF com várias placas: escolhe pela placa; se não der, não decide.
         const opcoes = porCpf[cpf];
-        const pelaPlaca = opcoes.filter(function (c) { return normalizar_(codigosBackup[c].placa) === normalizar_(l.placa); });
+        const pelaPlaca = opcoes.filter(mesmaPlaca);
         if (opcoes.length === 1) { correto = opcoes[0]; como = 'CPF'; }
         else if (pelaPlaca.length === 1) { correto = pelaPlaca[0]; como = 'CPF + placa'; }
-      } else if (!cpf && porNome[normalizar_(l.nome_completo)] && porNome[normalizar_(l.nome_completo)].length === 1) {
-        correto = porNome[normalizar_(l.nome_completo)][0]; como = 'nome';
+      } else if (porNome[normalizar_(l.nome_completo)]) {
+        // Sem CPF no backup (ex.: inativos antes do complemento): pelo nome; nome repetido, pela placa.
+        const opcoes = porNome[normalizar_(l.nome_completo)].filter(function (c) { return !cpfNormalizado_(codigosBackup[c].cpf) || !cpf; });
+        const pelaPlaca = opcoes.filter(mesmaPlaca);
+        if (opcoes.length === 1) { correto = opcoes[0]; como = 'nome'; }
+        else if (pelaPlaca.length === 1) { correto = pelaPlaca[0]; como = 'nome + placa'; }
       }
       const cpfFim = cpf ? cpf.slice(-3) : '';
       if (!correto) {
