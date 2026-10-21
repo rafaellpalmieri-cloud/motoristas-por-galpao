@@ -10,7 +10,7 @@ function ItemNav({ para, icone, rotulo, selo }: { para: string; icone: string; r
       to={para}
       end={para === '/'}
       className={({ isActive }) =>
-        `relative flex min-h-14 flex-1 flex-col items-center justify-center gap-0.5 text-xs font-medium ${isActive ? 'text-sky-800' : 'text-slate-500'}`
+        `relative flex min-h-14 flex-1 flex-col items-center justify-center gap-0.5 border-t-2 text-xs font-medium ${isActive ? 'border-laranja font-semibold text-sky-700' : 'border-transparent text-slate-500'}`
       }
     >
       <span className="text-xl" aria-hidden>
@@ -33,20 +33,25 @@ export function Layout() {
 
   return (
     <div className="min-h-dvh bg-slate-50">
-      <header className="sticky top-0 z-20 border-b border-slate-200 bg-white/95 backdrop-blur">
+      <header className="sticky top-0 z-20 bg-marinho">
         <div className="mx-auto flex max-w-3xl items-center justify-between gap-2 px-4 py-2">
-          <div className="min-w-0">
-            <p className="font-bold text-sky-800">Motoristas por Galpão</p>
-            <p className="truncate text-xs text-slate-500">
-              {usuario?.perfil?.nome}
-              {ehAdmin ? ' · Admin' : usuario?.galpoes.length ? ` · ${usuario.galpoes.join(', ')}` : ''}
-            </p>
+          <div className="flex min-w-0 items-center gap-3">
+            <img src="/marca/logo-branca.png" alt="LoogiRio" className="h-7 w-auto shrink-0" />
+            <div className="min-w-0 border-l border-white/20 pl-3">
+              <p className="truncate text-sm font-semibold leading-tight text-white">
+                Motoristas<span className="hidden sm:inline"> por Galpão</span>
+              </p>
+              <p className="truncate text-xs text-white/60">
+                {usuario?.perfil?.nome}
+                {ehAdmin ? ' · Admin' : usuario?.galpoes.length ? ` · ${usuario.galpoes.join(', ')}` : ''}
+              </p>
+            </div>
           </div>
           <div className="flex items-center gap-1">
             <NavLink
               to="/alertas"
               aria-label={alertas ? `${alertas} alertas novos` : 'Alertas'}
-              className="relative flex h-11 w-11 items-center justify-center rounded-full text-xl hover:bg-slate-100"
+              className="relative flex h-11 w-11 items-center justify-center rounded-full text-xl hover:bg-white/10"
             >
               🔔
               {!!alertas && (
@@ -58,12 +63,14 @@ export function Layout() {
             <button
               type="button"
               onClick={sair}
-              className="min-h-11 rounded-xl px-3 text-sm font-medium text-slate-600 hover:bg-slate-100"
+              className="min-h-11 rounded-xl px-3 text-sm font-medium text-white/80 hover:bg-white/10"
             >
               Sair
             </button>
           </div>
         </div>
+        {/* Faixa laranja da marca. */}
+        <div className="h-1 bg-gradient-to-r from-laranja to-amarelo" aria-hidden />
       </header>
 
       <FaixaNotificacoes />

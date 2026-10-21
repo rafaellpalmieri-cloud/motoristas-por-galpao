@@ -155,7 +155,7 @@ export default function Motoristas() {
 
   return (
     <Pagina titulo="Motoristas">
-      <div className="sticky top-[57px] z-10 -mx-4 mb-3 flex flex-col gap-2 bg-slate-50/95 px-4 pb-2 pt-1 backdrop-blur">
+      <div className="sticky top-16 z-10 -mx-4 mb-3 flex flex-col gap-2 bg-slate-50/95 px-4 pb-2 pt-1 backdrop-blur">
         <input
           type="search"
           value={busca}

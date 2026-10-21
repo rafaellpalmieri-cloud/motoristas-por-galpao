@@ -2,6 +2,24 @@
 
 @theme {
   --font-sans: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+
+  /* Identidade LoogiRio. As telas usam "sky" como cor principal: aqui ela vira o azul da marca. */
+  --color-sky-50: #eef3ff;
+  --color-sky-100: #dbe5ff;
+  --color-sky-200: #bccfff;
+  --color-sky-300: #8eadff;
+  --color-sky-400: #5a82ff;
+  --color-sky-500: #2b5cff;
+  --color-sky-600: #0a4bff;
+  --color-sky-700: #003ee0;
+  --color-sky-800: #0031b3;
+  --color-sky-900: #00248a;
+  --color-sky-950: #00124d;
+
+  --color-marinho: #00004a;
+  --color-marinho-claro: #0b0b66;
+  --color-laranja: #ff6a00;
+  --color-amarelo: #ffc300;
 }
 
 html {
