@@ -1,11 +1,13 @@
 // Ações de admin sobre um usuário existente.
-// Corpo: { "acao": "redefinir_senha" | "desativar" | "reativar", "user_id": "uuid" }
+// Corpo: { "acao": "redefinir_senha" | "desativar" | "reativar" | "excluir", "user_id": "uuid" }
 //  - redefinir_senha: gera nova senha temporária (devolvida UMA vez) e exige troca no próximo login.
 //  - desativar: perfil inativo + bloqueio de login no Auth.
 //  - reativar: desfaz o bloqueio.
+//  - excluir: apaga o usuário no Auth; perfil, função e galpões caem pelo ON DELETE CASCADE
+//    e o histórico fica com o nome de quem fez (alterado_por vira null).
 import { comCors, ErroHttp, exigirAdmin, gerarSenhaTemporaria, json, tratarErro } from '../_shared/admin.ts'
 
-const ACOES = ['redefinir_senha', 'desativar', 'reativar'] as const
+const ACOES = ['redefinir_senha', 'desativar', 'reativar', 'excluir'] as const
 type Acao = (typeof ACOES)[number]
 
 Deno.serve(
@@ -24,7 +26,7 @@ Deno.serve(
     if (!ACOES.includes(acao)) throw new ErroHttp(400, 'Ação inválida.')
     if (!/^[0-9a-f-]{36}$/i.test(userId)) throw new ErroHttp(400, 'Usuário inválido.')
     if (userId === adminId && acao !== 'redefinir_senha') {
-      throw new ErroHttp(400, 'Você não pode desativar a própria conta.')
+      throw new ErroHttp(400, acao === 'excluir' ? 'Você não pode excluir a própria conta.' : 'Você não pode desativar a própria conta.')
     }
 
     const { data: perfil, error: erroPerfil } = await admin
@@ -42,6 +44,12 @@ Deno.serve(
       const { error: e2 } = await admin.from('perfis').update({ trocar_senha: true }).eq('user_id', userId)
       if (e2) throw e2
       return json({ ok: true, senha_temporaria: senha })
+    }
+
+    if (acao === 'excluir') {
+      const { error } = await admin.auth.admin.deleteUser(userId)
+      if (error) throw new ErroHttp(400, 'Não foi possível excluir o usuário.')
+      return json({ ok: true })
     }
 
     const desativar = acao === 'desativar'

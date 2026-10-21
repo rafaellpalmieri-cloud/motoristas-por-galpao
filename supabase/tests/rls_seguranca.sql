@@ -1286,6 +1286,104 @@ end;
 $$;
 reset role;
 
+-- =====================================================================
+-- 18. Equipe: criar dispatcher (Edge Function), trocar função e excluir
+-- =====================================================================
+insert into auth.users (id, email) values
+  ('00000000-0000-4000-a000-000000000018', 'novo.disp@exemplo.test'),
+  ('00000000-0000-4000-a000-000000000019', 'outro.admin@exemplo.test');
+
+-- A Edge Function admin-criar-usuario grava como service_role.
+select set_config('request.jwt.claims', '{"role":"service_role"}', true);
+set local role service_role;
+do $$
+begin
+  insert into public.perfis (user_id, nome, email, telefone, ativo, trocar_senha)
+    values ('00000000-0000-4000-a000-000000000018', 'Novo Disp', 'novo.disp@exemplo.test', '21999990018', true, true);
+  insert into public.user_roles (user_id, role) values ('00000000-0000-4000-a000-000000000018', 'dispatcher');
+  insert into public.dispatcher_galpoes (user_id, galpao) values
+    ('00000000-0000-4000-a000-000000000018', 'SRJ1'), ('00000000-0000-4000-a000-000000000018', 'SRJ8');
+  insert into public.perfis (user_id, nome, email, ativo, trocar_senha)
+    values ('00000000-0000-4000-a000-000000000019', 'Outro Admin', 'outro.admin@exemplo.test', true, true);
+  insert into public.user_roles (user_id, role) values ('00000000-0000-4000-a000-000000000019', 'admin');
+  raise notice 'OK: service_role cria dispatcher com galpões';
+end;
+$$;
+reset role;
+
+-- Admin troca a função.
+select set_config('request.jwt.claims', '{"sub":"00000000-0000-4000-a000-000000000001","role":"authenticated"}', true);
+set local role authenticated;
+do $$
+begin
+  perform public.mudar_papel_usuario('00000000-0000-4000-a000-000000000018', 'admin', null);
+  if not exists (select 1 from public.user_roles where user_id = '00000000-0000-4000-a000-000000000018' and role = 'admin')
+     or exists (select 1 from public.user_roles where user_id = '00000000-0000-4000-a000-000000000018' and role = 'dispatcher')
+     or exists (select 1 from public.dispatcher_galpoes where user_id = '00000000-0000-4000-a000-000000000018') then
+    raise exception 'FALHOU: dispatcher não virou admin (ou ficou com galpões)';
+  end if;
+  raise notice 'OK: admin promove dispatcher a admin';
+
+  perform public.mudar_papel_usuario('00000000-0000-4000-a000-000000000018', 'dispatcher', array['SRJ2', 'srj9']);
+  if not exists (select 1 from public.user_roles where user_id = '00000000-0000-4000-a000-000000000018' and role = 'dispatcher')
+     or exists (select 1 from public.user_roles where user_id = '00000000-0000-4000-a000-000000000018' and role = 'admin')
+     or (select array_agg(galpao order by galpao) from public.dispatcher_galpoes
+         where user_id = '00000000-0000-4000-a000-000000000018') <> array['SRJ2', 'SRJ9'] then
+    raise exception 'FALHOU: admin não virou dispatcher com os galpões escolhidos';
+  end if;
+  raise notice 'OK: admin rebaixa admin a dispatcher com galpões';
+
+  begin
+    perform public.mudar_papel_usuario('00000000-0000-4000-a000-000000000018', 'dispatcher', array[]::text[]);
+    raise exception 'FALHOU: dispatcher ficou sem galpão';
+  exception when check_violation then raise notice 'OK: dispatcher precisa de ao menos um galpão';
+  end;
+  begin
+    perform public.mudar_papel_usuario('00000000-0000-4000-a000-000000000018', 'dispatcher', array['XYZ']);
+    raise exception 'FALHOU: aceitou galpão inválido';
+  exception when check_violation then raise notice 'OK: galpão inválido recusado';
+  end;
+  begin
+    perform public.mudar_papel_usuario('00000000-0000-4000-a000-000000000001', 'dispatcher', array['SRJ1']);
+    raise exception 'FALHOU: admin mudou a própria função';
+  exception when insufficient_privilege then raise notice 'OK: admin não muda a própria função';
+  end;
+end;
+$$;
+reset role;
+
+-- Dispatcher não troca função de ninguém.
+select set_config('request.jwt.claims', '{"sub":"00000000-0000-4000-a000-000000000002","role":"authenticated"}', true);
+set local role authenticated;
+do $$
+begin
+  begin
+    perform public.mudar_papel_usuario('00000000-0000-4000-a000-000000000002', 'admin', null);
+    raise exception 'FALHOU: dispatcher se promoveu a admin';
+  exception when insufficient_privilege then raise notice 'OK: dispatcher não troca função';
+  end;
+end;
+$$;
+reset role;
+
+-- Excluir (Edge Function apaga o usuário no Auth): o resto cai junto, o histórico fica.
+do $$
+begin
+  insert into public.motorista_historico (motorista_id, galpao, status_anterior, status_novo, motivo, alterado_por, alterado_por_nome, origem)
+    values ('10000000-0000-4000-a000-000000000001', 'SRJ1', 'ativo', 'ativo', 'teste', '00000000-0000-4000-a000-000000000018', 'Novo Disp', 'app');
+  delete from auth.users where id = '00000000-0000-4000-a000-000000000018';
+  if exists (select 1 from public.perfis where user_id = '00000000-0000-4000-a000-000000000018')
+     or exists (select 1 from public.user_roles where user_id = '00000000-0000-4000-a000-000000000018')
+     or exists (select 1 from public.dispatcher_galpoes where user_id = '00000000-0000-4000-a000-000000000018') then
+    raise exception 'FALHOU: excluir deixou perfil, função ou galpões para trás';
+  end if;
+  if not exists (select 1 from public.motorista_historico where alterado_por is null and alterado_por_nome = 'Novo Disp') then
+    raise exception 'FALHOU: excluir apagou o histórico';
+  end if;
+  raise notice 'OK: excluir remove o usuário e mantém o histórico com o nome';
+end;
+$$;
+
 do $$ begin raise notice '=== TODOS OS TESTES PASSARAM ==='; end $$;
 
 rollback;
