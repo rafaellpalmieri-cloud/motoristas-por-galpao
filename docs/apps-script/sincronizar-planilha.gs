@@ -33,6 +33,8 @@ const CONFIG = {
   URL_FUNCAO: 'https://idihrzbchxaptjgvsjfu.supabase.co/functions/v1/sincronizar-planilha',
   TAMANHO_LOTE: 200,
   PASTA_BACKUP: 'Backups - Motoristas por Galpão',
+  // Backup usado por compararComBackup e pela correção de códigos ('' = o mais recente).
+  BACKUP_REFERENCIA: '2026-10-18_1417',
   BACKUPS_MANTIDOS: 12,
   INTERVALO_MINUTOS: 15,
 };
@@ -228,26 +230,15 @@ function corrigirFiltros() {
 
 /**
  * Só leitura: compara os códigos da planilha com o último backup do Drive
- * (pasta CONFIG.PASTA_BACKUP). Lista as linhas cujo código, no backup, era de
+ * (CONFIG.BACKUP_REFERENCIA). Lista as linhas cujo código, no backup, era de
  * outra pessoa (CPF ou nome diferente): sinal de código que mudou de linha.
  */
 function compararComBackup() {
-  const pastas = DriveApp.getFoldersByName(CONFIG.PASTA_BACKUP);
-  if (!pastas.hasNext()) throw new Error('Pasta "' + CONFIG.PASTA_BACKUP + '" não encontrada no Drive.');
-  const subpastas = [];
-  const it = pastas.next().getFolders();
-  while (it.hasNext()) subpastas.push(it.next());
-  if (!subpastas.length) throw new Error('Nenhum backup encontrado.');
-  subpastas.sort(function (a, b) { return a.getName() < b.getName() ? 1 : -1; });
-  const arquivos = subpastas[0].searchFiles('title contains "motoristas_"');
-  if (!arquivos.hasNext()) throw new Error('Backup ' + subpastas[0].getName() + ' sem o arquivo de motoristas.');
-  const tabela = Utilities.parseCsv(arquivos.next().getBlob().getDataAsString('UTF-8').replace(/^﻿/, ''), ';');
-  const cab = tabela[0];
-  const iCod = cab.indexOf('codigo'), iNome = cab.indexOf('nome_completo'), iCpf = cab.indexOf('cpf');
+  const backup = lerBackup_();
   const doBackup = {};
-  tabela.slice(1).forEach(function (r) { doBackup[String(r[iCod]).trim()] = { nome: r[iNome], cpf: r[iCpf] }; });
+  backup.motoristas.forEach(function (m) { doBackup[m.codigo] = { nome: m.nome, cpf: m.cpf }; });
 
-  const soDigitos = function (v) { const d = String(v || '').replace(/\D/g, ''); return d ? d.padStart(11, '0') : ''; };
+  const soDigitos = cpfNormalizado_;
   const trocados = [];
   [CONFIG.ABA_ATIVOS, CONFIG.ABA_INATIVOS].forEach(function (nomeAba) {
     const aba = aba_(nomeAba);
@@ -264,8 +255,139 @@ function compararComBackup() {
       }
     });
   });
-  console.log('COMPARAÇÃO COM O BACKUP ' + subpastas[0].getName() + ': ' + trocados.length + ' código(s) com outra pessoa.' +
+  console.log('COMPARAÇÃO COM O BACKUP ' + backup.nome + ': ' + trocados.length + ' código(s) com outra pessoa.' +
     (trocados.length ? '\n  ' + trocados.slice(0, 200).join('\n  ') : ''));
+}
+
+function cpfNormalizado_(v) {
+  const d = String(v || '').replace(/\D/g, '');
+  return d ? d.padStart(11, '0') : '';
+}
+
+/**
+ * Lê o arquivo de motoristas de um backup do Drive: o de CONFIG.BACKUP_REFERENCIA
+ * (nome da subpasta, ex. "2026-10-18_1417") ou, se vazio, o mais recente.
+ */
+function lerBackup_() {
+  const pastas = DriveApp.getFoldersByName(CONFIG.PASTA_BACKUP);
+  if (!pastas.hasNext()) throw new Error('Pasta "' + CONFIG.PASTA_BACKUP + '" não encontrada no Drive.');
+  const subpastas = [];
+  const it = pastas.next().getFolders();
+  while (it.hasNext()) subpastas.push(it.next());
+  subpastas.sort(function (a, b) { return a.getName() < b.getName() ? 1 : -1; });
+  const escolhida = CONFIG.BACKUP_REFERENCIA
+    ? subpastas.filter(function (p) { return p.getName() === CONFIG.BACKUP_REFERENCIA; })[0]
+    : subpastas[0];
+  if (!escolhida) throw new Error('Backup "' + (CONFIG.BACKUP_REFERENCIA || 'mais recente') + '" não encontrado.');
+  const arquivos = escolhida.searchFiles('title contains "motoristas_"');
+  if (!arquivos.hasNext()) throw new Error('Backup ' + escolhida.getName() + ' sem o arquivo de motoristas.');
+  const tabela = Utilities.parseCsv(arquivos.next().getBlob().getDataAsString('UTF-8').replace(/^﻿/, ''), ';');
+  const cab = tabela[0];
+  const i = function (nome) { return cab.indexOf(nome); };
+  return {
+    nome: escolhida.getName(),
+    motoristas: tabela.slice(1).filter(function (r) { return String(r[i('codigo')] || '').trim(); }).map(function (r) {
+      return {
+        codigo: String(r[i('codigo')]).trim(),
+        nome: r[i('nome_completo')] || '',
+        cpf: r[i('cpf')] || '',
+        placa: r[i('placa')] || '',
+      };
+    }),
+  };
+}
+
+/** Desliga a sincronização automática (o backup semanal continua). Para religar: instalarGatilho. */
+function pausarSincronizacao() {
+  let n = 0;
+  ScriptApp.getProjectTriggers()
+    .filter(function (t) { return t.getHandlerFunction() === 'sincronizarTudo' || t.getHandlerFunction() === 'sincronizarInativos'; })
+    .forEach(function (t) { ScriptApp.deleteTrigger(t); n++; });
+  console.log('Sincronização automática pausada (' + n + ' gatilho(s) removido(s)). Para religar, rode instalarGatilho.');
+}
+
+/** Só mostra o que a correção faria; não altera nada. */
+function simularCorrecaoCodigos() { corrigirCodigos_(false); }
+
+/** Aplica a correção dos códigos (rode antes simularCorrecaoCodigos e confira o resultado). */
+function aplicarCorrecaoCodigos() { corrigirCodigos_(true); }
+
+/**
+ * Devolve a cada linha o código que a pessoa tinha no backup de referência,
+ * achando a pessoa pelo CPF (ou, sem CPF, pelo nome, se for único no backup).
+ * Linhas de quem não está no backup (cadastrados depois) não são mexidas.
+ * Gera a aba "CONFERÊNCIA CÓDIGOS" com cada mudança.
+ */
+function corrigirCodigos_(aplicar) {
+  const gatilhoAtivo = ScriptApp.getProjectTriggers().some(function (t) { return t.getHandlerFunction() === 'sincronizarTudo'; });
+  if (aplicar && gatilhoAtivo) throw new Error('Rode pausarSincronizacao antes de aplicar a correção.');
+
+  const backup = lerBackup_();
+  const porCpf = {}, porNome = {}, codigosBackup = {};
+  backup.motoristas.forEach(function (m) {
+    codigosBackup[m.codigo] = m;
+    const cpf = cpfNormalizado_(m.cpf);
+    if (cpf) (porCpf[cpf] = porCpf[cpf] || []).push(m.codigo);
+    const nome = normalizar_(m.nome);
+    if (nome) (porNome[nome] = porNome[nome] || []).push(m.codigo);
+  });
+
+  const relatorio = [['Aba', 'Linha', 'Nome', 'CPF termina em', 'Código atual', 'Código correto', 'Achado por', 'Situação']];
+  const resumo = { corrigidos: 0, ja_certos: 0, nao_estao_no_backup: 0, sem_como_decidir: 0, linha_mudou: 0 };
+  [CONFIG.ABA_ATIVOS, CONFIG.ABA_INATIVOS].forEach(function (nomeAba) {
+    const aba = aba_(nomeAba);
+    const pos = posicoes_(aba);
+    if (pos.codigo === undefined) return;
+    const linhas = lerLinhas_(aba, pos, ['codigo', 'nome_completo', 'cpf', 'placa'])
+      .filter(function (l) { return l.nome_completo || l.cpf; });
+    const usados = {};
+    linhas.forEach(function (l) {
+      const cpf = cpfNormalizado_(l.cpf);
+      let correto = null, como = '';
+      if (cpf && porCpf[cpf]) {
+        // Mesmo CPF com várias placas: escolhe pela placa; se não der, não decide.
+        const opcoes = porCpf[cpf];
+        const pelaPlaca = opcoes.filter(function (c) { return normalizar_(codigosBackup[c].placa) === normalizar_(l.placa); });
+        if (opcoes.length === 1) { correto = opcoes[0]; como = 'CPF'; }
+        else if (pelaPlaca.length === 1) { correto = pelaPlaca[0]; como = 'CPF + placa'; }
+      } else if (!cpf && porNome[normalizar_(l.nome_completo)] && porNome[normalizar_(l.nome_completo)].length === 1) {
+        correto = porNome[normalizar_(l.nome_completo)][0]; como = 'nome';
+      }
+      const cpfFim = cpf ? cpf.slice(-3) : '';
+      if (!correto) {
+        const noBackup = (cpf && porCpf[cpf]) || porNome[normalizar_(l.nome_completo)];
+        resumo[noBackup ? 'sem_como_decidir' : 'nao_estao_no_backup']++;
+        if (noBackup) relatorio.push([nomeAba, l.linha, l.nome_completo, cpfFim, l.codigo, '', '', 'decidir à mão']);
+        return;
+      }
+      if (usados[correto]) {
+        resumo.sem_como_decidir++;
+        relatorio.push([nomeAba, l.linha, l.nome_completo, cpfFim, l.codigo, correto, como, 'código repetido (linha ' + usados[correto] + '): decidir à mão']);
+        return;
+      }
+      usados[correto] = l.linha;
+      if (correto === l.codigo) { resumo.ja_certos++; return; }
+      let situacao = aplicar ? 'corrigido' : 'será corrigido';
+      if (aplicar) {
+        const nomeAgora = String(aba.getRange(l.linha, pos.nome_completo + 1).getValue()).trim();
+        if (nomeAgora !== String(l.nome_completo).trim()) { resumo.linha_mudou++; situacao = 'linha mudou: não alterado'; }
+        else { aba.getRange(l.linha, pos.codigo + 1).setNumberFormat('@').setValue(correto); resumo.corrigidos++; }
+      } else {
+        resumo.corrigidos++;
+      }
+      relatorio.push([nomeAba, l.linha, l.nome_completo, cpfFim, l.codigo, correto, como, situacao]);
+    });
+  });
+
+  const planilha = SpreadsheetApp.getActiveSpreadsheet();
+  const nomeRel = 'CONFERÊNCIA CÓDIGOS';
+  const rel = planilha.getSheetByName(nomeRel) || planilha.insertSheet(nomeRel);
+  rel.clearContents();
+  rel.getRange(1, 1, relatorio.length, relatorio[0].length).setNumberFormat('@').setValues(relatorio.map(function (r) {
+    return r.map(function (v) { return v === null || v === undefined ? '' : String(v); });
+  }));
+  console.log((aplicar ? 'CORREÇÃO APLICADA' : 'SIMULAÇÃO (nada foi alterado)') + ' com o backup ' + backup.nome + ': ' +
+    JSON.stringify(resumo) + '\n  Detalhes na aba "' + nomeRel + '".');
 }
 
 /** Executado pelo gatilho: primeiro ATIVOS (novos entram), depois INATIVOS. */
