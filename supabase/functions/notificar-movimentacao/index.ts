@@ -3,7 +3,7 @@
 //      • notificação push para os dispatchers ativos do galpão (menos quem fez);
 //      • WhatsApp (Z-API), só se configurado;
 //      • mudanças feitas NO APP: linha na aba "MOVIMENTAÇÕES APP" (se configurado).
-//  { solicitacao_id, status } → pedido de inativação:
+//  { solicitacao_id, status } → pedido de inativação ou reativação:
 //      • "pendente": push para os admins ativos;
 //      • "aprovada"/"recusada": push para quem pediu.
 //  { tarefa } → tarefas agendadas (pg_cron):
@@ -70,6 +70,7 @@ interface Pedido {
   id: number
   motorista_id: string
   galpao: string | null
+  tipo: 'inativacao' | 'reativacao'
   motivo: string
   status: string
   solicitado_por: string | null
@@ -157,7 +158,7 @@ async function tratarMovimento(admin: SupabaseClient, historicoId: number): Prom
 }
 
 // ---------------------------------------------------------------------
-// Pedido de inativação
+// Pedido de inativação ou reativação
 // ---------------------------------------------------------------------
 async function tratarPedido(admin: SupabaseClient, id: number, status: string): Promise<Response> {
   if (!Number.isInteger(id) || id <= 0 || !['pendente', 'aprovada', 'recusada'].includes(status)) {
@@ -178,13 +179,20 @@ async function tratarPedido(admin: SupabaseClient, id: number, status: string): 
     .maybeSingle<Pedido>()
   if (!pedido) return json({ erro: 'Pedido não encontrado.' }, 404)
 
+  const reativar = pedido.tipo === 'reativacao'
   let usuarios: string[] = []
   let aviso: Aviso
   if (status === 'pendente') {
     usuarios = await adminsAtivos(admin)
     aviso = {
-      title: `📝 Pedido de inativação · ${pedido.galpao ?? 'sem galpão'}`,
-      body: `${nomeMotorista(pedido.motoristas)}\nMotivo: ${pedido.motivo}\nPor ${pedido.solicitado_por_nome ?? 'dispatcher'}`,
+      title: `📝 Pedido de ${reativar ? 'reativação' : 'inativação'} · ${pedido.galpao ?? 'sem galpão'}`,
+      body: [
+        nomeMotorista(pedido.motoristas),
+        reativar ? null : `Motivo: ${pedido.motivo}`,
+        `Por ${pedido.solicitado_por_nome ?? 'dispatcher'}`,
+      ]
+        .filter(Boolean)
+        .join('\n'),
       url: '/pendencias',
       tag: `pedido-${pedido.id}`,
     }
@@ -195,7 +203,9 @@ async function tratarPedido(admin: SupabaseClient, id: number, status: string): 
       title: aprovado ? '✅ Pedido aprovado' : '↩️ Pedido recusado',
       body: [
         nomeMotorista(pedido.motoristas),
-        aprovado ? 'Motorista inativado.' : 'O motorista continua ativo.',
+        aprovado
+          ? reativar ? 'Motorista reativado.' : 'Motorista inativado.'
+          : reativar ? 'O motorista continua inativo.' : 'O motorista continua ativo.',
         pedido.resposta ? `“${pedido.resposta}”` : null,
         pedido.decidido_por_nome ? `Por ${pedido.decidido_por_nome}` : null,
       ]
@@ -435,7 +445,7 @@ async function pedidosParados(admin: SupabaseClient) {
   const galpoes = [...new Set(atrasados.map((s) => s.galpao ?? 'sem galpão'))].join(', ')
   const push = await enviarPush(admin, await adminsAtivos(admin), {
     title: '⏰ Pedidos aguardando resposta',
-    body: `${pedidos} pedido(s) de inativação há mais de 24 h sem resposta (${galpoes}).`,
+    body: `${pedidos} pedido(s) há mais de 24 h sem resposta (${galpoes}).`,
     url: '/pendencias',
     tag: 'pedidos-parados',
   })

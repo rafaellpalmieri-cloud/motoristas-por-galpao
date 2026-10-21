@@ -32,6 +32,7 @@ export function CardPessoa({
   const ativas = placas.filter((p) => p.status === 'ativo')
   const inativaveis = ativas.filter((p) => !pendentes.has(p.id))
   const inativas = placas.filter((p) => p.status === 'inativo')
+  const reativaveis = inativas.filter((p) => !pendentes.has(p.id))
   const algumaAtiva = ativas.length > 0
   const varias = placas.length > 1
 
@@ -89,8 +90,8 @@ export function CardPessoa({
           </a>
         )}
         <div className="ml-auto flex gap-2">
-          {inativas.length > 0 && (
-            <Botao variante="sucesso" onClick={() => aoAlterarStatus({ acao: 'reativar', motoristas: inativas })}>
+          {reativaveis.length > 0 && (
+            <Botao variante="sucesso" onClick={() => aoAlterarStatus({ acao: 'reativar', motoristas: reativaveis })}>
               Reativar
             </Botao>
           )}
@@ -135,9 +136,9 @@ function LinhaPlaca({
         </span>
         <span className="flex flex-wrap items-center gap-1">
           {compacta && <BadgeStatus status={placa.status} />}
-          {pendente && ativo && (
+          {pendente && (
             <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-bold uppercase text-amber-900">
-              Inativação solicitada
+              {pendente.tipo === 'reativacao' ? 'Reativação solicitada' : 'Inativação solicitada'}
             </span>
           )}
           {novo && <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-bold uppercase text-amber-800">Novo</span>}

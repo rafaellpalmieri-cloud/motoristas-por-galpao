@@ -67,16 +67,22 @@ export function useSolicitacoesDoMotorista(motoristaId: string | undefined) {
   })
 }
 
-/** Pede a inativação de uma ou mais placas (um pedido agrupado). */
+/** Pede a inativação ou a reativação de uma ou mais placas (um pedido agrupado). */
 export function useSolicitar() {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: async (v: { motoristaIds: string[]; motivo: string; observacao?: string }) => {
-      const { error } = await supabase.rpc('solicitar_inativacao_lote', {
-        p_motorista_ids: v.motoristaIds,
-        p_motivo: v.motivo,
-        p_observacao: v.observacao ?? null,
-      })
+    mutationFn: async (v: { tipo: Solicitacao['tipo']; motoristaIds: string[]; motivo?: string; observacao?: string }) => {
+      const { error } =
+        v.tipo === 'reativacao'
+          ? await supabase.rpc('solicitar_reativacao_lote', {
+              p_motorista_ids: v.motoristaIds,
+              p_observacao: v.observacao ?? null,
+            })
+          : await supabase.rpc('solicitar_inativacao_lote', {
+              p_motorista_ids: v.motoristaIds,
+              p_motivo: v.motivo ?? null,
+              p_observacao: v.observacao ?? null,
+            })
       if (error) throw error
     },
     onSettled: () => invalidarTudo(queryClient),

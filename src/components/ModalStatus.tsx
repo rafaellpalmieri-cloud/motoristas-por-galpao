@@ -16,11 +16,12 @@ export interface AlvoStatus {
 
 /**
  * Inativar (com motivo) ou reativar uma ou mais placas do mesmo motorista.
- * Dispatcher não inativa direto: envia um pedido que o admin aprova.
+ * Dispatcher não inativa nem reativa direto: envia um pedido que o admin aprova.
  */
 export function ModalStatus({ alvo, aoFechar }: { alvo: AlvoStatus | null; aoFechar: () => void }) {
   const { ehAdmin } = useAuth()
-  const titulo = alvo?.acao === 'reativar' ? 'Reativar' : ehAdmin ? 'Inativar' : 'Solicitar inativação'
+  const reativar = alvo?.acao === 'reativar'
+  const titulo = ehAdmin ? (reativar ? 'Reativar' : 'Inativar') : reativar ? 'Solicitar reativação' : 'Solicitar inativação'
   return (
     <Modal aberto={!!alvo} titulo={titulo} aoFechar={aoFechar}>
       {alvo && <Conteudo key={alvo.motoristas.map((m) => m.id).join()} alvo={alvo} aoFechar={aoFechar} />}
@@ -31,7 +32,7 @@ export function ModalStatus({ alvo, aoFechar }: { alvo: AlvoStatus | null; aoFec
 function Conteudo({ alvo, aoFechar }: { alvo: AlvoStatus; aoFechar: () => void }) {
   const { ehAdmin } = useAuth()
   const inativar = alvo.acao === 'inativar'
-  const solicitar = inativar && !ehAdmin
+  const solicitar = !ehAdmin
   const [marcados, setMarcados] = useState<string[]>(alvo.motoristas.map((m) => m.id))
   const [motivo, setMotivo] = useState('')
   const [observacao, setObservacao] = useState('')
@@ -55,9 +56,18 @@ function Conteudo({ alvo, aoFechar }: { alvo: AlvoStatus; aoFechar: () => void }
     const obs = observacao.trim() || undefined
     if (solicitar) {
       pedir.mutate(
-        { motoristaIds: escolhidos.map((m) => m.id), motivo, observacao: obs },
         {
-          onSuccess: () => toast(`Pedido enviado (${nome}, ${resumo}). Continua ativo até a aprovação.`, 'sucesso'),
+          tipo: inativar ? 'inativacao' : 'reativacao',
+          motoristaIds: escolhidos.map((m) => m.id),
+          motivo: inativar ? motivo : undefined,
+          observacao: obs,
+        },
+        {
+          onSuccess: () =>
+            toast(
+              `Pedido enviado (${nome}, ${resumo}). Continua ${inativar ? 'ativo' : 'inativo'} até a aprovação.`,
+              'sucesso',
+            ),
           onError: (e) => toast(`Não foi possível solicitar: ${mensagemErro(e)}`, 'erro'),
         },
       )
@@ -116,8 +126,9 @@ function Conteudo({ alvo, aoFechar }: { alvo: AlvoStatus; aoFechar: () => void }
 
       {solicitar && (
         <p className="rounded-xl bg-amber-50 p-3 text-sm text-amber-900">
-          A equipe vai receber o pedido. As placas só ficam inativas depois que ela aprovar (envio para a Coopmetro e baixa
-          no sistema interno).
+          {inativar
+            ? 'A equipe vai receber o pedido. As placas só ficam inativas depois que ela aprovar (envio para a Coopmetro e baixa no sistema interno).'
+            : 'A equipe vai receber o pedido. As placas só voltam a ficar ativas depois que ela aprovar (Coopmetro e sistema interno).'}
         </p>
       )}
 
@@ -165,7 +176,7 @@ function Conteudo({ alvo, aoFechar }: { alvo: AlvoStatus; aoFechar: () => void }
           Cancelar
         </Botao>
         <Botao variante={inativar ? 'perigo' : 'sucesso'} onClick={confirmar}>
-          {solicitar ? 'Solicitar' : inativar ? 'Inativar' : 'Reativar'}
+          {solicitar ? 'Enviar pedido' : inativar ? 'Inativar' : 'Reativar'}
         </Botao>
       </div>
     </div>

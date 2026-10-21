@@ -14,7 +14,7 @@ function semAcento(texto: string) {
     .toLowerCase()
 }
 
-/** Pedidos de inativação: admin aprova/recusa; dispatcher acompanha os do seu galpão. */
+/** Pedidos de inativação e reativação: admin aprova/recusa; dispatcher acompanha os do seu galpão. */
 export default function Pendencias() {
   const { ehAdmin, usuario } = useAuth()
   const [aba, setAba] = useState<'pendentes' | 'decididas'>('pendentes')
@@ -41,11 +41,11 @@ export default function Pendencias() {
   }, [consulta.data, buscaAdiada, galpao])
 
   return (
-    <Pagina titulo={ehAdmin ? 'Pendências' : 'Pedidos de inativação'}>
+    <Pagina titulo={ehAdmin ? 'Pendências' : 'Pedidos'}>
       <p className="mb-3 text-slate-600">
         {ehAdmin
-          ? 'Pedidos dos dispatchers. Aprove depois de enviar para a Coopmetro e inativar no sistema interno.'
-          : 'Seus pedidos e os do seu galpão. O motorista só fica inativo depois que a equipe aprovar.'}
+          ? 'Pedidos dos dispatchers. Aprove depois de atualizar a Coopmetro e o sistema interno.'
+          : 'Seus pedidos e os do seu galpão. Inativação e reativação só valem depois que a equipe aprovar.'}
       </p>
 
       <div className="mb-3 grid grid-cols-2 rounded-xl border border-slate-300 bg-white p-1" role="tablist">

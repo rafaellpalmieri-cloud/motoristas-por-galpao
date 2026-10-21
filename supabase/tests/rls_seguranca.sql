@@ -458,15 +458,47 @@ $$;
 reset role;
 
 -- =====================================================================
--- 6. Dispatcher SRJ1 consegue reativar com histórico
+-- 6. Dispatcher SRJ1 não reativa direto: pede, e o admin aprova
 -- =====================================================================
 select set_config('request.jwt.claims', '{"sub":"00000000-0000-4000-a000-000000000002","role":"authenticated"}', true);
 set local role authenticated;
 
 do $$
-declare n integer;
 begin
-  perform public.alterar_status_motorista('10000000-0000-4000-a000-000000000001', 'ativo', null, 'voltou');
+  begin
+    perform public.alterar_status_motorista('10000000-0000-4000-a000-000000000001', 'ativo', null, 'voltou');
+    raise exception 'FALHOU: dispatcher reativou direto';
+  exception when insufficient_privilege then raise notice 'OK: dispatcher não reativa direto';
+  end;
+  perform public.solicitar_reativacao_lote(array['10000000-0000-4000-a000-000000000001']::uuid[], 'voltou');
+  if (select status from public.motoristas where id = '10000000-0000-4000-a000-000000000001') <> 'inativo' then
+    raise exception 'FALHOU: o pedido de reativação já reativou o motorista';
+  end if;
+  begin
+    perform public.decidir_grupo_inativacao(
+      (select grupo from public.solicitacoes_inativacao
+        where motorista_id = '10000000-0000-4000-a000-000000000001' and status = 'pendente'), true, null);
+    raise exception 'FALHOU: dispatcher aprovou a própria reativação';
+  exception when insufficient_privilege then null;
+  end;
+  raise notice 'OK: dispatcher pede reativação e o motorista segue inativo até a aprovação';
+end;
+$$;
+
+reset role;
+select set_config('request.jwt.claims', '{"sub":"00000000-0000-4000-a000-000000000001","role":"authenticated"}', true);
+set local role authenticated;
+
+do $$
+declare n integer; v_grupo uuid;
+begin
+  select grupo into v_grupo from public.solicitacoes_inativacao
+   where motorista_id = '10000000-0000-4000-a000-000000000001' and status = 'pendente' and tipo = 'reativacao';
+  if v_grupo is null then raise exception 'FALHOU: pedido de reativação não registrado'; end if;
+  perform public.decidir_grupo_inativacao(v_grupo, true, null);
+  if not exists (select 1 from public.solicitacoes_inativacao where grupo = v_grupo and status = 'aprovada') then
+    raise exception 'FALHOU: pedido de reativação não ficou aprovado';
+  end if;
   select count(*) into n from public.motoristas
    where codigo = 'TESTE-SRJ1' and status = 'ativo' and inativo_desde is null and motivo_inativacao is null;
   if n <> 1 then raise exception 'FALHOU: reativação não aplicada'; end if;
@@ -571,7 +603,18 @@ begin
     raise exception 'FALHOU: dispatcher SRJ2 viu inativação de motorista sem galpão';
   end if;
   raise notice 'OK: inativação da planilha aparece só para o galpão certo';
-  perform public.alterar_status_motorista('10000000-0000-4000-a000-000000000002', 'ativo', null, 'voltou');
+  perform public.solicitar_reativacao_lote(array['10000000-0000-4000-a000-000000000002']::uuid[], 'voltou');
+end;
+$$;
+
+reset role;
+select set_config('request.jwt.claims', '{"sub":"00000000-0000-4000-a000-000000000001","role":"authenticated"}', true);
+set local role authenticated;
+do $$
+begin
+  perform public.decidir_grupo_inativacao(
+    (select grupo from public.solicitacoes_inativacao
+      where motorista_id = '10000000-0000-4000-a000-000000000002' and status = 'pendente' and tipo = 'reativacao'), true, null);
 end;
 $$;
 
@@ -1383,6 +1426,57 @@ begin
   raise notice 'OK: excluir remove o usuário e mantém o histórico com o nome';
 end;
 $$;
+
+-- =====================================================================
+-- 19. Reativação com aprovação: recusa, pedido inválido e reativação direta do admin
+-- =====================================================================
+insert into public.motoristas (id, codigo, nome_completo, celular, placa, modal, galpao, status, inativo_desde, motivo_inativacao) values
+  ('30000000-0000-4000-a000-000000000001', 'TESTE-REAT1', 'Reativar Um',   '21933330001', 'REA1A11', 'Moto', 'SRJ1', 'inativo', date '2026-10-01', 'Parou de rodar'),
+  ('30000000-0000-4000-a000-000000000002', 'TESTE-REAT2', 'Reativar Dois', '21933330002', 'REA1B22', 'Moto', 'SRJ1', 'inativo', date '2026-10-01', 'Parou de rodar'),
+  ('30000000-0000-4000-a000-000000000003', 'TESTE-REAT3', 'Ativo Tres',    '21933330003', 'REA1C33', 'Moto', 'SRJ1', 'ativo', null, null);
+
+select set_config('request.jwt.claims', '{"sub":"00000000-0000-4000-a000-000000000002","role":"authenticated"}', true);
+set local role authenticated;
+do $$
+begin
+  perform public.solicitar_reativacao_lote(array['30000000-0000-4000-a000-000000000001']::uuid[], null);
+  perform public.solicitar_reativacao_lote(array['30000000-0000-4000-a000-000000000002']::uuid[], 'voltou a rodar');
+  begin
+    perform public.solicitar_reativacao_lote(array['30000000-0000-4000-a000-000000000003']::uuid[], null);
+    raise exception 'FALHOU: pediu reativação de motorista ativo';
+  exception when invalid_parameter_value then raise notice 'OK: não pede reativação de quem já está ativo';
+  end;
+  begin
+    perform public.solicitar_reativacao_lote(array['30000000-0000-4000-a000-000000000001']::uuid[], null);
+    raise exception 'FALHOU: dois pedidos pendentes para o mesmo motorista';
+  exception when invalid_parameter_value then raise notice 'OK: um pedido pendente por motorista';
+  end;
+end;
+$$;
+reset role;
+
+select set_config('request.jwt.claims', '{"sub":"00000000-0000-4000-a000-000000000001","role":"authenticated"}', true);
+set local role authenticated;
+do $$
+begin
+  perform public.decidir_grupo_inativacao(
+    (select grupo from public.solicitacoes_inativacao where motorista_id = '30000000-0000-4000-a000-000000000001' and status = 'pendente'),
+    false, 'ainda sem documentação');
+  if not exists (select 1 from public.motoristas where id = '30000000-0000-4000-a000-000000000001'
+                 and status = 'inativo' and motivo_inativacao = 'Parou de rodar') then
+    raise exception 'FALHOU: recusar a reativação mudou o motorista';
+  end if;
+  raise notice 'OK: reativação recusada mantém o motorista inativo';
+
+  perform public.alterar_status_motorista('30000000-0000-4000-a000-000000000002', 'ativo', null, null);
+  if not exists (select 1 from public.solicitacoes_inativacao where motorista_id = '30000000-0000-4000-a000-000000000002'
+                 and tipo = 'reativacao' and status = 'aprovada') then
+    raise exception 'FALHOU: reativação direta do admin não fechou o pedido pendente';
+  end if;
+  raise notice 'OK: admin reativa direto e o pedido pendente fica aprovado';
+end;
+$$;
+reset role;
 
 do $$ begin raise notice '=== TODOS OS TESTES PASSARAM ==='; end $$;
 

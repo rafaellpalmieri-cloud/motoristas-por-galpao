@@ -22,13 +22,15 @@ export function SeloSolicitacao({ status }: { status: StatusSolicitacao }) {
 }
 
 /**
- * Pedido de inativação (uma ou várias placas do mesmo motorista, mesmo grupo)
- * com as ações permitidas para quem está vendo.
+ * Pedido de inativação ou reativação (uma ou várias placas do mesmo motorista,
+ * mesmo grupo) com as ações permitidas para quem está vendo.
  */
 export function CartaoSolicitacao({ itens, mostrarMotorista = true }: { itens: Solicitacao[]; mostrarMotorista?: boolean }) {
   const { ehAdmin, session } = useAuth()
   const [modal, setModal] = useState<'aprovar' | 'recusar' | 'cancelar' | null>(null)
   const s = itens[0]
+  const reativar = s.tipo === 'reativacao'
+  const tipoPedido = reativar ? 'reativação' : 'inativação'
   const pendentes = itens.filter((i) => i.status === 'pendente')
   const pendente = pendentes.length > 0
   const podeCancelar = pendente && (ehAdmin || s.solicitado_por === session?.user.id)
@@ -46,7 +48,10 @@ export function CartaoSolicitacao({ itens, mostrarMotorista = true }: { itens: S
             <span className="font-normal text-slate-500"> · {varias ? `${itens.length} placas` : placas[0]}</span>
           </Link>
         ) : (
-          <p className="font-semibold text-slate-900">Pedido de inativação{varias ? ` (${itens.length} placas)` : ''}</p>
+          <p className="font-semibold text-slate-900">
+            Pedido de {tipoPedido}
+            {varias ? ` (${itens.length} placas)` : ''}
+          </p>
         )}
         <SeloSolicitacao status={pendente ? 'pendente' : s.status} />
       </div>
@@ -67,8 +72,8 @@ export function CartaoSolicitacao({ itens, mostrarMotorista = true }: { itens: S
         </ul>
       )}
 
-      <p className="mt-2 text-rose-700">
-        {s.motivo}
+      <p className={`mt-2 ${reativar ? 'text-emerald-700' : 'text-rose-700'}`}>
+        {reativar ? 'Pedido de reativação' : s.motivo}
         {s.galpao ? ` · ${s.galpao}` : ''}
       </p>
       {s.observacao && <p className="mt-1 text-sm text-slate-600">“{s.observacao}”</p>}
@@ -97,8 +102,8 @@ export function CartaoSolicitacao({ itens, mostrarMotorista = true }: { itens: S
           )}
           {pendente && ehAdmin && (
             <>
-              <Botao variante="perigo" onClick={() => setModal('aprovar')}>
-                Aprovar inativação
+              <Botao variante={reativar ? 'sucesso' : 'perigo'} onClick={() => setModal('aprovar')}>
+                Aprovar {tipoPedido}
               </Botao>
               <Botao variante="secundario" onClick={() => setModal('recusar')}>
                 Recusar
@@ -115,7 +120,7 @@ export function CartaoSolicitacao({ itens, mostrarMotorista = true }: { itens: S
 
       <Modal
         aberto={!!modal}
-        titulo={modal === 'aprovar' ? 'Aprovar inativação' : modal === 'recusar' ? 'Recusar pedido' : 'Cancelar pedido'}
+        titulo={modal === 'aprovar' ? `Aprovar ${tipoPedido}` : modal === 'recusar' ? 'Recusar pedido' : 'Cancelar pedido'}
         aoFechar={() => setModal(null)}
       >
         {modal && (
@@ -154,15 +159,26 @@ function Decisao({
   const toast = useToast()
   const carregando = decidir.isPending || cancelar.isPending
   const qual = placas.length > 1 ? `as ${placas.length} placas (${placas.join(', ')})` : `a placa ${placas[0]}`
+  const reativar = s.tipo === 'reativacao'
 
   function confirmar() {
-    if (acao === 'aprovar' && !confirmado) return setErro('Confirme que já fez a baixa na Coopmetro e no sistema interno.')
+    if (acao === 'aprovar' && !confirmado) {
+      return setErro(
+        reativar
+          ? 'Confirme que já reativou na Coopmetro e no sistema interno.'
+          : 'Confirme que já fez a baixa na Coopmetro e no sistema interno.',
+      )
+    }
     if (acao === 'recusar' && !resposta.trim()) return setErro('Explique o motivo da recusa para o dispatcher.')
     setErro(null)
     const opcoes = {
       onSuccess: () => {
         toast(
-          acao === 'aprovar' ? `${nome}: inativado(s).` : acao === 'recusar' ? 'Pedido recusado.' : 'Pedido cancelado.',
+          acao === 'aprovar'
+            ? `${nome}: ${reativar ? 'reativado(s)' : 'inativado(s)'}.`
+            : acao === 'recusar'
+              ? 'Pedido recusado.'
+              : 'Pedido cancelado.',
           'sucesso',
         )
         aoFechar()
@@ -176,20 +192,25 @@ function Decisao({
   return (
     <div className="flex flex-col gap-4">
       <p className="text-slate-700">
-        {acao === 'aprovar' && (
-          <>
-            <strong>{nome}</strong>: {qual} {placas.length > 1 ? 'ficarão' : 'ficará'} <strong>inativa(s)</strong> (motivo:{' '}
-            {s.motivo}).
-          </>
-        )}
+        {acao === 'aprovar' &&
+          (reativar ? (
+            <>
+              <strong>{nome}</strong>: {qual} {placas.length > 1 ? 'voltarão' : 'voltará'} a ficar <strong>ativa(s)</strong>.
+            </>
+          ) : (
+            <>
+              <strong>{nome}</strong>: {qual} {placas.length > 1 ? 'ficarão' : 'ficará'} <strong>inativa(s)</strong> (motivo:{' '}
+              {s.motivo}).
+            </>
+          ))}
         {acao === 'recusar' && (
           <>
-            <strong>{nome}</strong> continua ativo. O dispatcher verá a sua resposta.
+            <strong>{nome}</strong> continua {reativar ? 'inativo' : 'ativo'}. O dispatcher verá a sua resposta.
           </>
         )}
         {acao === 'cancelar' && (
           <>
-            O pedido de inativação de <strong>{nome}</strong> ({qual}) será cancelado.
+            O pedido de {reativar ? 'reativação' : 'inativação'} de <strong>{nome}</strong> ({qual}) será cancelado.
           </>
         )}
       </p>
@@ -202,7 +223,11 @@ function Decisao({
             onChange={(e) => setConfirmado(e.target.checked)}
             className="mt-0.5 h-5 w-5 accent-rose-600"
           />
-          <span className="text-sm text-slate-800">Já enviei para a Coopmetro e inativei no nosso sistema interno.</span>
+          <span className="text-sm text-slate-800">
+            {reativar
+              ? 'Já reativei na Coopmetro e no nosso sistema interno.'
+              : 'Já enviei para a Coopmetro e inativei no nosso sistema interno.'}
+          </span>
         </label>
       )}
 
@@ -218,7 +243,13 @@ function Decisao({
             value={resposta}
             onChange={(e) => setResposta(e.target.value)}
             className="rounded-xl border border-slate-300 px-3 py-2 text-base focus:border-sky-600 focus:outline-none focus:ring-2 focus:ring-sky-200"
-            placeholder={acao === 'recusar' ? 'Ex.: motorista fez rota ontem, confirmar antes' : 'Ex.: enviado na planilha da Coopmetro'}
+            placeholder={
+              acao === 'recusar'
+                ? reativar
+                  ? 'Ex.: documentação ainda pendente'
+                  : 'Ex.: motorista fez rota ontem, confirmar antes'
+                : 'Ex.: enviado na planilha da Coopmetro'
+            }
           />
         </div>
       )}
@@ -229,7 +260,11 @@ function Decisao({
         <Botao variante="secundario" onClick={aoFechar}>
           Voltar
         </Botao>
-        <Botao variante={acao === 'aprovar' ? 'perigo' : 'primario'} carregando={carregando} onClick={confirmar}>
+        <Botao
+          variante={acao === 'aprovar' ? (reativar ? 'sucesso' : 'perigo') : 'primario'}
+          carregando={carregando}
+          onClick={confirmar}
+        >
           {acao === 'aprovar' ? 'Aprovar' : acao === 'recusar' ? 'Recusar' : 'Cancelar pedido'}
         </Botao>
       </div>

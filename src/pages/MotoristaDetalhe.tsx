@@ -100,7 +100,7 @@ export default function MotoristaDetalhe() {
               WhatsApp
             </a>
           )}
-          {!(pedidoPendente && m.status === 'ativo') && (
+          {!pedidoPendente && (
             <Botao variante={m.status === 'ativo' ? 'perigo' : 'sucesso'} className="col-span-2" onClick={() => setAlvo({ acao: m.status === 'ativo' ? 'inativar' : 'reativar', motoristas: [m] })}>
               {m.status === 'ativo' ? 'Inativar' : 'Reativar'}
             </Botao>
@@ -127,7 +127,7 @@ export default function MotoristaDetalhe() {
         </div>
       )}
 
-      {pedidoPendente && m.status === 'ativo' && (
+      {pedidoPendente && (
         <div className="mb-4">
           <CartaoSolicitacao itens={[pedidoPendente]} mostrarMotorista={false} />
         </div>
