@@ -8,7 +8,7 @@ import { useCpfsCompletos, useMotoristas } from '../hooks/motoristas'
 import { usePendentes } from '../hooks/solicitacoes'
 import { GALPOES, SEM_GALPAO } from '../lib/constantes'
 import { mensagemErro } from '../lib/erros'
-import { DIAS_PARADO, formatarCpf, nuncaRodou, parado } from '../lib/rotas'
+import { DIAS_PARADO, diasSemRota, FAIXAS_SEM_ROTA, formatarCpf, nuncaRodou, parado } from '../lib/rotas'
 import type { Motorista } from '../lib/tipos'
 
 type FiltroStatus = 'todos' | 'ativo' | 'inativo'
@@ -32,6 +32,7 @@ export default function Motoristas() {
   const buscaAdiada = useDeferredValue(busca)
   const status = (params.get('status') as FiltroStatus) || 'todos'
   const rota = params.get('rota') ?? ''
+  const faixa = FAIXAS_SEM_ROTA.find(([valor]) => valor === rota)
   const galpao = params.get('galpao') ?? ''
 
   function definir(chave: string, valor: string) {
@@ -83,6 +84,10 @@ export default function Motoristas() {
       if (status !== 'todos' && m.status !== status) return false
       if (rota === 'nunca' && !nuncaRodou(m)) return false
       if (rota === 'parado' && !parado(m)) return false
+      if (faixa) {
+        const dias = diasSemRota(m)
+        if (dias === null || dias < faixa[2] || dias > faixa[3]) return false
+      }
       if (!termo) return true
       return (
         semAcento(m.nome_completo ?? '').includes(termo) ||
@@ -91,7 +96,7 @@ export default function Motoristas() {
           (cpfsCompletos?.get(m.id) ?? (m.cpf_mascarado ?? '').replace(/\D/g, '')).includes(termoCpf))
       )
     })
-  }, [doGalpao, buscaAdiada, status, rota, cpfsCompletos])
+  }, [doGalpao, buscaAdiada, status, rota, faixa, cpfsCompletos])
 
   // Mostra a pessoa inteira (todas as placas) se qualquer placa dela passou no filtro.
   const pessoas = useMemo(() => {
@@ -178,7 +183,13 @@ export default function Motoristas() {
         >
           <option value="">Rotas: todos</option>
           <option value="nunca">Nunca fez rota</option>
-          <option value="parado">Sem rota há {DIAS_PARADO}+ dias</option>
+          {FAIXAS_SEM_ROTA.map(([valor, rotulo]) => (
+            <option key={valor} value={valor}>
+              {rotulo}
+            </option>
+          ))}
+          {/* Atalho do painel e do lembrete semanal. */}
+          {rota === 'parado' && <option value="parado">Sem rota há {DIAS_PARADO}+ dias</option>}
         </select>
         {data && (
           <div className="flex gap-2 text-sm">

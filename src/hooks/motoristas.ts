@@ -122,25 +122,64 @@ export interface Alerta extends Historico {
   motoristas: { nome_completo: string | null; placa: string | null; codigo: string } | null
 }
 
-/** Quantas inativações feitas por OUTRAS pessoas (ou pela planilha) desde a última visita aos alertas. */
+/**
+ * Alertas não lidos (sino): inativações dos últimos 30 dias feitas por outras
+ * pessoas ou pela planilha, ativos sem rota há DIAS_CORTE+ dias e pedidos do
+ * próprio usuário aprovados/recusados. Só o "Marcar como lido" tira da conta.
+ */
 export function useContagemAlertas() {
-  const { session, usuario } = useAuth()
-  const vistosEm = usuario?.perfil?.alertas_vistos_em
+  const { session } = useAuth()
   return useQuery({
-    queryKey: ['alertas', 'contagem', vistosEm],
-    enabled: !!session && !!vistosEm,
+    queryKey: ['alertas', 'contagem'],
+    enabled: !!session,
     refetchInterval: 60_000,
     queryFn: async () => {
-      const { count, error } = await supabase
-        .from('motorista_historico')
-        .select('id', { count: 'exact', head: true })
-        .eq('status_novo', 'inativo')
-        .gt('alterado_em', vistosEm!)
-        // Inclui as inativações vindas da planilha (alterado_por nulo).
-        .or(`alterado_por.is.null,alterado_por.neq.${session!.user.id}`)
+      const { data, error } = await supabase.rpc('alertas_nao_lidos')
       if (error) throw error
-      return count ?? 0
+      return (data as number | null) ?? 0
     },
+  })
+}
+
+/** Chaves dos alertas (iguais às de alertas_nao_lidos() no banco). */
+export const chaveAlerta = {
+  inativacao: (historicoId: number) => `mov:${historicoId}`,
+  corte: (m: Pick<Motorista, 'id' | 'ultima_rota'>) => `rota:${m.id}:${(m.ultima_rota ?? '').slice(0, 10)}`,
+  pedido: (s: { id: number; grupo: string | null }) => `pedido:${s.grupo ?? s.id}`,
+}
+
+/** Chaves dos alertas que o usuário já marcou como lidos. */
+export function useAlertasLidos() {
+  const { session } = useAuth()
+  return useQuery({
+    queryKey: ['alertas', 'lidos'],
+    enabled: !!session,
+    queryFn: async () => {
+      const lista = await buscarTodas<{ chave: string }>((de, ate) =>
+        supabase.from('alertas_lidos').select('chave').order('chave').range(de, ate),
+      )
+      return new Set(lista.map((l) => l.chave))
+    },
+  })
+}
+
+export function useMarcarAlertasLidos() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: async (chaves: string[]) => {
+      for (let i = 0; i < chaves.length; i += 1000) {
+        const { error } = await supabase.rpc('marcar_alertas_lidos', { p_chaves: chaves.slice(i, i + 1000) })
+        if (error) throw error
+      }
+    },
+    onMutate: async (chaves) => {
+      await queryClient.cancelQueries({ queryKey: ['alertas', 'lidos'] })
+      const anterior = queryClient.getQueryData<Set<string>>(['alertas', 'lidos'])
+      queryClient.setQueryData<Set<string>>(['alertas', 'lidos'], new Set([...(anterior ?? []), ...chaves]))
+      return { anterior }
+    },
+    onError: (_e, _v, ctx) => queryClient.setQueryData(['alertas', 'lidos'], ctx?.anterior),
+    onSettled: () => queryClient.invalidateQueries({ queryKey: ['alertas'] }),
   })
 }
 

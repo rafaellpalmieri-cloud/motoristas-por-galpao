@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useAuth } from '../auth/AuthProvider'
 import { useAlterarStatus } from '../hooks/motoristas'
 import { useSolicitar } from '../hooks/solicitacoes'
-import { MOTIVOS_INATIVACAO } from '../lib/constantes'
+import { MOTIVOS_INATIVACAO, MOTIVOS_REATIVACAO } from '../lib/constantes'
 import { mensagemErro } from '../lib/erros'
 import type { Motorista } from '../lib/tipos'
 import { useToast } from './Toast'
@@ -49,8 +49,8 @@ function Conteudo({ alvo, aoFechar }: { alvo: AlvoStatus; aoFechar: () => void }
 
   function confirmar() {
     if (!escolhidos.length) return setErro('Escolha ao menos uma placa.')
-    if (inativar && !motivo) return setErro('Escolha o motivo.')
-    if (inativar && motivo === 'Outro' && !observacao.trim()) return setErro('Descreva o motivo na observação.')
+    if (!motivo) return setErro('Escolha o motivo.')
+    if (motivo === 'Outro' && !observacao.trim()) return setErro('Descreva o motivo na observação.')
     setErro(null)
     aoFechar()
     const obs = observacao.trim() || undefined
@@ -59,7 +59,7 @@ function Conteudo({ alvo, aoFechar }: { alvo: AlvoStatus; aoFechar: () => void }
         {
           tipo: inativar ? 'inativacao' : 'reativacao',
           motoristaIds: escolhidos.map((m) => m.id),
-          motivo: inativar ? motivo : undefined,
+          motivo,
           observacao: obs,
         },
         {
@@ -77,7 +77,7 @@ function Conteudo({ alvo, aoFechar }: { alvo: AlvoStatus; aoFechar: () => void }
       {
         motoristas: escolhidos,
         novoStatus: inativar ? 'inativo' : 'ativo',
-        motivo: inativar ? motivo : undefined,
+        motivo,
         observacao: obs,
       },
       {
@@ -132,10 +132,12 @@ function Conteudo({ alvo, aoFechar }: { alvo: AlvoStatus; aoFechar: () => void }
         </p>
       )}
 
-      {inativar && (
+      {(
         <fieldset className="flex flex-col gap-2">
-          <legend className="mb-1 text-sm font-medium text-slate-700">Motivo *</legend>
-          {MOTIVOS_INATIVACAO.map((m) => (
+          <legend className="mb-1 text-sm font-medium text-slate-700">
+            Motivo da {inativar ? 'inativação' : 'reativação'} *
+          </legend>
+          {(inativar ? MOTIVOS_INATIVACAO : MOTIVOS_REATIVACAO).map((m) => (
             <label
               key={m}
               className={`flex min-h-11 cursor-pointer items-center gap-3 rounded-xl border px-3 ${motivo === m ? 'border-sky-600 bg-sky-50' : 'border-slate-300'}`}
@@ -156,7 +158,7 @@ function Conteudo({ alvo, aoFechar }: { alvo: AlvoStatus; aoFechar: () => void }
 
       <div className="flex flex-col gap-1">
         <label htmlFor="obs" className="text-sm font-medium text-slate-700">
-          Observação{inativar && motivo === 'Outro' ? ' *' : ' (opcional)'}
+          Observação{motivo === 'Outro' ? ' *' : ' (opcional)'}
         </label>
         <textarea
           id="obs"
@@ -165,7 +167,7 @@ function Conteudo({ alvo, aoFechar }: { alvo: AlvoStatus; aoFechar: () => void }
           value={observacao}
           onChange={(e) => setObservacao(e.target.value)}
           className="rounded-xl border border-slate-300 px-3 py-2 text-base focus:border-sky-600 focus:outline-none focus:ring-2 focus:ring-sky-200"
-          placeholder={inativar ? 'Ex.: vendeu o carro; continua rodando de moto' : 'Ex.: voltou a rodar'}
+          placeholder={inativar ? 'Ex.: vendeu o carro; continua rodando de moto' : 'Ex.: voltou a fazer rotas no SRJ2'}
         />
       </div>
 

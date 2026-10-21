@@ -470,7 +470,7 @@ begin
     raise exception 'FALHOU: dispatcher reativou direto';
   exception when insufficient_privilege then raise notice 'OK: dispatcher não reativa direto';
   end;
-  perform public.solicitar_reativacao_lote(array['10000000-0000-4000-a000-000000000001']::uuid[], 'voltou');
+  perform public.solicitar_reativacao_lote(array['10000000-0000-4000-a000-000000000001']::uuid[], 'Voltou a rodar', 'voltou');
   if (select status from public.motoristas where id = '10000000-0000-4000-a000-000000000001') <> 'inativo' then
     raise exception 'FALHOU: o pedido de reativação já reativou o motorista';
   end if;
@@ -603,7 +603,7 @@ begin
     raise exception 'FALHOU: dispatcher SRJ2 viu inativação de motorista sem galpão';
   end if;
   raise notice 'OK: inativação da planilha aparece só para o galpão certo';
-  perform public.solicitar_reativacao_lote(array['10000000-0000-4000-a000-000000000002']::uuid[], 'voltou');
+  perform public.solicitar_reativacao_lote(array['10000000-0000-4000-a000-000000000002']::uuid[], 'Voltou a rodar', 'voltou');
 end;
 $$;
 
@@ -1202,7 +1202,7 @@ begin
     raise exception 'FALHOU: inativar uma placa afetou a outra';
   end if;
   perform public.alterar_status_lote(
-    array['20000000-0000-4000-a000-000000000001', '20000000-0000-4000-a000-000000000002']::uuid[], 'ativo', null, null);
+    array['20000000-0000-4000-a000-000000000001', '20000000-0000-4000-a000-000000000002']::uuid[], 'ativo', 'Voltou a rodar', null);
   if (select count(*) from public.motoristas where codigo in ('TESTE-P1A', 'TESTE-P1B') and status = 'ativo') <> 2 then
     raise exception 'FALHOU: reativação em lote';
   end if;
@@ -1439,15 +1439,15 @@ select set_config('request.jwt.claims', '{"sub":"00000000-0000-4000-a000-0000000
 set local role authenticated;
 do $$
 begin
-  perform public.solicitar_reativacao_lote(array['30000000-0000-4000-a000-000000000001']::uuid[], null);
-  perform public.solicitar_reativacao_lote(array['30000000-0000-4000-a000-000000000002']::uuid[], 'voltou a rodar');
+  perform public.solicitar_reativacao_lote(array['30000000-0000-4000-a000-000000000001']::uuid[], 'Documentação regularizada', null);
+  perform public.solicitar_reativacao_lote(array['30000000-0000-4000-a000-000000000002']::uuid[], 'Voltou a rodar', 'voltou a rodar');
   begin
-    perform public.solicitar_reativacao_lote(array['30000000-0000-4000-a000-000000000003']::uuid[], null);
+    perform public.solicitar_reativacao_lote(array['30000000-0000-4000-a000-000000000003']::uuid[], 'Voltou a rodar', null);
     raise exception 'FALHOU: pediu reativação de motorista ativo';
   exception when invalid_parameter_value then raise notice 'OK: não pede reativação de quem já está ativo';
   end;
   begin
-    perform public.solicitar_reativacao_lote(array['30000000-0000-4000-a000-000000000001']::uuid[], null);
+    perform public.solicitar_reativacao_lote(array['30000000-0000-4000-a000-000000000001']::uuid[], 'Voltou a rodar', null);
     raise exception 'FALHOU: dois pedidos pendentes para o mesmo motorista';
   exception when invalid_parameter_value then raise notice 'OK: um pedido pendente por motorista';
   end;
@@ -1468,12 +1468,107 @@ begin
   end if;
   raise notice 'OK: reativação recusada mantém o motorista inativo';
 
-  perform public.alterar_status_motorista('30000000-0000-4000-a000-000000000002', 'ativo', null, null);
+  perform public.alterar_status_motorista('30000000-0000-4000-a000-000000000002', 'ativo', 'Voltou a rodar', null);
   if not exists (select 1 from public.solicitacoes_inativacao where motorista_id = '30000000-0000-4000-a000-000000000002'
                  and tipo = 'reativacao' and status = 'aprovada') then
     raise exception 'FALHOU: reativação direta do admin não fechou o pedido pendente';
   end if;
   raise notice 'OK: admin reativa direto e o pedido pendente fica aprovado';
+end;
+$$;
+reset role;
+
+-- =====================================================================
+-- 20. Motivo da reativação e alertas lidos um a um
+-- =====================================================================
+insert into public.motoristas (id, codigo, nome_completo, celular, placa, modal, galpao, status, inativo_desde, motivo_inativacao,
+                               realizou_rotas, qtd_rotas, ultima_rota) values
+  ('40000000-0000-4000-a000-000000000001', 'TESTE-MOT1', 'Motivo Um', '21944440001', 'MOT1A11', 'Moto', 'SRJ1', 'inativo',
+   date '2026-10-01', 'Parou de rodar', null, null, null),
+  ('40000000-0000-4000-a000-000000000002', 'TESTE-CORTE', 'Para Cortar', '21944440002', 'COR1A11', 'Moto', 'SRJ1', 'ativo',
+   null, null, true, 9, (now() at time zone 'America/Sao_Paulo')::date - 25),
+  ('40000000-0000-4000-a000-000000000003', 'TESTE-CORTE2', 'Corte Outro Galpao', '21944440003', 'COR1B22', 'Moto', 'SRJ2', 'ativo',
+   null, null, true, 9, (now() at time zone 'America/Sao_Paulo')::date - 40),
+  ('40000000-0000-4000-a000-000000000004', 'TESTE-RODANDO', 'Rodando', '21944440004', 'ROD1A11', 'Moto', 'SRJ1', 'ativo',
+   null, null, true, 9, (now() at time zone 'America/Sao_Paulo')::date - 3);
+
+select set_config('request.jwt.claims', '{"sub":"00000000-0000-4000-a000-000000000002","role":"authenticated"}', true);
+set local role authenticated;
+do $$
+declare n integer; n2 integer; v_chave text;
+begin
+  begin
+    perform public.solicitar_reativacao_lote(array['40000000-0000-4000-a000-000000000001']::uuid[], null, null);
+    raise exception 'FALHOU: pediu reativação sem motivo';
+  exception when invalid_parameter_value then raise notice 'OK: reativação exige motivo';
+  end;
+  begin
+    perform public.solicitar_reativacao_lote(array['40000000-0000-4000-a000-000000000001']::uuid[], 'Outro', null);
+    raise exception 'FALHOU: motivo Outro sem observação';
+  exception when invalid_parameter_value then raise notice 'OK: motivo Outro exige observação';
+  end;
+  perform public.solicitar_reativacao_lote(array['40000000-0000-4000-a000-000000000001']::uuid[], 'Documentação regularizada', 'CNH renovada');
+  if not exists (select 1 from public.solicitacoes_inativacao where motorista_id = '40000000-0000-4000-a000-000000000001'
+                 and tipo = 'reativacao' and motivo = 'Documentação regularizada' and observacao = 'CNH renovada') then
+    raise exception 'FALHOU: motivo da reativação não foi guardado no pedido';
+  end if;
+  raise notice 'OK: motivo e observação da reativação ficam guardados no pedido';
+
+  -- Alertas: o dispatcher SRJ1 vê só o "para cortar" do galpão dele (20+ dias), não o de 3 dias.
+  n := public.alertas_nao_lidos();
+  v_chave := 'rota:40000000-0000-4000-a000-000000000002:' || ((now() at time zone 'America/Sao_Paulo')::date - 25);
+  perform public.marcar_alertas_lidos(array[v_chave, 'rota:40000000-0000-4000-a000-000000000004:x', 'invalida; drop']);
+  n2 := public.alertas_nao_lidos();
+  if n2 <> n - 1 then raise exception 'FALHOU: marcar como lido não baixou a contagem (% → %)', n, n2; end if;
+  if (select count(*) from public.alertas_lidos) <> (select count(*) from public.alertas_lidos where user_id = '00000000-0000-4000-a000-000000000002') then
+    raise exception 'FALHOU: dispatcher leu alertas lidos de outra pessoa';
+  end if;
+  if exists (select 1 from public.alertas_lidos where chave = 'invalida; drop') then
+    raise exception 'FALHOU: aceitou chave de alerta inválida';
+  end if;
+  raise notice 'OK: alerta de corte (20+ dias) conta como não lido até marcar, e cada um vê só os seus';
+  begin
+    insert into public.alertas_lidos (user_id, chave) values ('00000000-0000-4000-a000-000000000003', 'mov:1');
+    raise exception 'FALHOU: gravou alerta lido direto na tabela';
+  exception when insufficient_privilege then raise notice 'OK: alertas lidos só pela função';
+  end;
+end;
+$$;
+reset role;
+
+-- Admin aprova: a reativação grava o motivo no histórico e o pedido vira alerta não lido de quem pediu.
+select set_config('request.jwt.claims', '{"sub":"00000000-0000-4000-a000-000000000001","role":"authenticated"}', true);
+set local role authenticated;
+do $$
+begin
+  begin
+    perform public.alterar_status_motorista('40000000-0000-4000-a000-000000000001', 'ativo', null, null);
+    raise exception 'FALHOU: admin reativou sem motivo';
+  exception when invalid_parameter_value then raise notice 'OK: reativação direta do admin também exige motivo';
+  end;
+  perform public.decidir_grupo_inativacao(
+    (select grupo from public.solicitacoes_inativacao where motorista_id = '40000000-0000-4000-a000-000000000001' and status = 'pendente'),
+    true, null);
+  if not exists (select 1 from public.motorista_historico where motorista_id = '40000000-0000-4000-a000-000000000001'
+                 and status_novo = 'ativo' and motivo = 'Documentação regularizada') then
+    raise exception 'FALHOU: motivo da reativação não foi para o histórico';
+  end if;
+  raise notice 'OK: motivo da reativação fica no histórico do motorista';
+end;
+$$;
+reset role;
+
+select set_config('request.jwt.claims', '{"sub":"00000000-0000-4000-a000-000000000002","role":"authenticated"}', true);
+set local role authenticated;
+do $$
+declare v_grupo text; n integer;
+begin
+  select coalesce(grupo::text, id::text) into v_grupo from public.solicitacoes_inativacao
+   where motorista_id = '40000000-0000-4000-a000-000000000001' and status = 'aprovada';
+  n := public.alertas_nao_lidos();
+  perform public.marcar_alertas_lidos(array['pedido:' || v_grupo]);
+  if public.alertas_nao_lidos() <> n - 1 then raise exception 'FALHOU: pedido aprovado não era alerta não lido'; end if;
+  raise notice 'OK: pedido aprovado aparece como alerta não lido para quem pediu';
 end;
 $$;
 reset role;

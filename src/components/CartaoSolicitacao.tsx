@@ -73,7 +73,7 @@ export function CartaoSolicitacao({ itens, mostrarMotorista = true }: { itens: S
       )}
 
       <p className={`mt-2 ${reativar ? 'text-emerald-700' : 'text-rose-700'}`}>
-        {reativar ? 'Pedido de reativação' : s.motivo}
+        {reativar ? `Reativação${s.motivo && s.motivo !== 'Reativação' ? ` · ${s.motivo}` : ''}` : s.motivo}
         {s.galpao ? ` · ${s.galpao}` : ''}
       </p>
       {s.observacao && <p className="mt-1 text-sm text-slate-600">“{s.observacao}”</p>}

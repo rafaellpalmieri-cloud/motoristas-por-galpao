@@ -18,6 +18,7 @@ function semAcento(texto: string) {
 export default function Pendencias() {
   const { ehAdmin, usuario } = useAuth()
   const [aba, setAba] = useState<'pendentes' | 'decididas'>('pendentes')
+  const [tipo, setTipo] = useState<Solicitacao['tipo']>('inativacao')
   const [busca, setBusca] = useState('')
   const [galpao, setGalpao] = useState('')
   const buscaAdiada = useDeferredValue(busca)
@@ -31,6 +32,7 @@ export default function Pendencias() {
     const termo = semAcento(buscaAdiada.trim())
     const termoPlaca = termo.replace(/[^a-z0-9]/g, '')
     return (consulta.data ?? []).filter((s: Solicitacao) => {
+      if (s.tipo !== tipo) return false
       if (galpao && s.galpao !== galpao) return false
       if (!termo) return true
       return (
@@ -38,7 +40,9 @@ export default function Pendencias() {
         (!!termoPlaca && semAcento(s.motoristas?.placa ?? '').replace(/[^a-z0-9]/g, '').includes(termoPlaca))
       )
     })
-  }, [consulta.data, buscaAdiada, galpao])
+  }, [consulta.data, buscaAdiada, galpao, tipo])
+
+  const pendentesDoTipo = (t: Solicitacao['tipo']) => agruparPedidos((pendentes.data ?? []).filter((s) => s.tipo === t)).length
 
   return (
     <Pagina titulo={ehAdmin ? 'Pendências' : 'Pedidos'}>
@@ -48,10 +52,34 @@ export default function Pendencias() {
           : 'Seus pedidos e os do seu galpão. Inativação e reativação só valem depois que a equipe aprovar.'}
       </p>
 
+      <div className="mb-2 grid grid-cols-2 gap-2" role="tablist" aria-label="Tipo de pedido">
+        {(
+          [
+            ['inativacao', 'Inativação', 'border-rose-600 bg-rose-50 text-rose-800'],
+            ['reativacao', 'Reativação', 'border-emerald-600 bg-emerald-50 text-emerald-800'],
+          ] as const
+        ).map(([valor, rotulo, cor]) => {
+          const qtd = pendentes.data ? pendentesDoTipo(valor) : 0
+          return (
+            <button
+              key={valor}
+              type="button"
+              role="tab"
+              aria-selected={tipo === valor}
+              onClick={() => setTipo(valor)}
+              className={`flex min-h-12 items-center justify-center gap-2 rounded-xl border-2 text-base font-bold ${tipo === valor ? cor : 'border-slate-200 bg-white text-slate-600'}`}
+            >
+              {rotulo}
+              {qtd > 0 && <span className="rounded-full bg-amber-400 px-2 text-sm text-amber-950">{qtd}</span>}
+            </button>
+          )
+        })}
+      </div>
+
       <div className="mb-3 grid grid-cols-2 rounded-xl border border-slate-300 bg-white p-1" role="tablist">
         {(
           [
-            ['pendentes', `Pendentes${pendentes.data ? ` (${agruparPedidos(pendentes.data).length})` : ''}`],
+            ['pendentes', `Pendentes${pendentes.data ? ` (${pendentesDoTipo(tipo)})` : ''}`],
             ['decididas', 'Últimos 30 dias'],
           ] as const
         ).map(([valor, rotulo]) => (
@@ -99,7 +127,9 @@ export default function Pendencias() {
       ) : consulta.error ? (
         <EstadoErro mensagem={mensagemErro(consulta.error)} aoTentarDeNovo={() => consulta.refetch()} />
       ) : filtradas.length === 0 ? (
-        <EstadoVazio titulo={aba === 'pendentes' ? 'Nenhum pedido pendente' : 'Nenhum pedido nos últimos 30 dias'} />
+        <EstadoVazio
+          titulo={`${aba === 'pendentes' ? 'Nenhum pedido pendente' : 'Nenhum pedido nos últimos 30 dias'} de ${tipo === 'inativacao' ? 'inativação' : 'reativação'}`}
+        />
       ) : (
         <ul className="flex flex-col gap-3">
           {agruparPedidos(filtradas).map((itens) => (
