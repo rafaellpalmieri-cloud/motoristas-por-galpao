@@ -7,7 +7,10 @@
  * Funções para executar:
  *  - preencherCodigos   → UMA vez: cria/preenche a coluna "codigo" nas abas ATIVOS e INATIVOS
  *                          com o código que o motorista já tem no app (busca por placa/celular).
- *  - sincronizarTudo    → envia ATIVOS (novos e dados atualizados) e depois INATIVOS (inativações).
+ *  - gerarCodigosNovos  → dá código (M0001...) aos motoristas novos da aba ATIVOS que
+ *                          o app ainda não conhece. Também roda dentro do sincronizarTudo.
+ *  - sincronizarTudo    → gera códigos novos, envia ATIVOS (novos e dados atualizados)
+ *                          e depois INATIVOS (inativações).
  *  - instalarGatilho    → UMA vez: agenda sincronizarTudo a cada 15 minutos e o
  *                          backup semanal (domingo de madrugada).
  *  - fazerBackup        → salva no seu Google Drive uma cópia (CSV) de motoristas,
@@ -186,6 +189,7 @@ function sincronizarInativos() {
 
 /** Executado pelo gatilho: primeiro ATIVOS (novos entram), depois INATIVOS. */
 function sincronizarTudo() {
+  gerarCodigosNovos();
   sincronizarAtivos();
   sincronizarInativos();
 }
@@ -240,6 +244,89 @@ function preencherCodigos() {
     console.log(nomeAba + ': ' + JSON.stringify(resumo) +
       (pendentes.length ? '\n  Preencha à mão as linhas: ' + pendentes.join(', ') : ''));
   });
+}
+
+/**
+ * Dá código novo (M0001, M0002...) aos motoristas NOVOS da aba ATIVOS: linhas sem
+ * código, com nome e placa/celular, que o app não encontra nem pela placa nem pelo
+ * celular. O número é o seguinte ao maior já usado na planilha (as duas abas) ou no app.
+ * Quem o app já conhece não recebe código novo (use preencherCodigos).
+ * Roda sozinho no sincronizarTudo; pode ser executado à mão também.
+ */
+function gerarCodigosNovos() {
+  const trava = LockService.getScriptLock();
+  trava.waitLock(30000);
+  try {
+    const aba = aba_(CONFIG.ABA_ATIVOS);
+    const pos = posicoes_(aba);
+    const total = aba.getLastRow() - 1;
+    if (pos.codigo === undefined || total < 1) return;
+
+    const faixaCodigo = aba.getRange(2, pos.codigo + 1, total, 1);
+    const codigos = faixaCodigo.getValues();
+    const candidatas = lerLinhas_(aba, pos, ['nome_completo', 'placa', 'celular'])
+      .filter(function (l) { return !String(codigos[l.linha - 2][0]).trim() && l.nome_completo; });
+    if (!candidatas.length) return;
+
+    const semContato = candidatas.filter(function (l) { return !l.placa && !l.celular; });
+    const novas = [];
+    const conhecidas = [];
+    enviar_('buscar_codigos', candidatas
+      .filter(function (l) { return l.placa || l.celular; })
+      .map(function (l) { return { linha: l.linha, placa: l.placa, celular: l.celular }; }))
+      .forEach(function (lote) {
+        lote.forEach(function (r) { (r.situacao === 'nao_encontrado' ? novas : conhecidas).push(Number(r.linha)); });
+      });
+
+    if (novas.length) {
+      const formato = /^M(\d+)$/i;
+      let maior = 0;
+      let digitos = 4;
+      const considerar = function (c) {
+        const m = formato.exec(String(c || '').trim());
+        if (!m) return;
+        maior = Math.max(maior, Number(m[1]));
+        digitos = Math.max(digitos, m[1].length);
+      };
+      codigos.forEach(function (c) { considerar(c[0]); });
+      const inativos = aba_(CONFIG.ABA_INATIVOS);
+      const posInativos = posicoes_(inativos);
+      if (posInativos.codigo !== undefined && inativos.getLastRow() > 1) {
+        inativos.getRange(2, posInativos.codigo + 1, inativos.getLastRow() - 1, 1).getValues()
+          .forEach(function (c) { considerar(c[0]); });
+      }
+      codigosDoApp_().forEach(considerar);
+
+      novas.sort(function (a, b) { return a - b; }).forEach(function (linha) {
+        maior++;
+        codigos[linha - 2][0] = 'M' + String(maior).padStart(digitos, '0');
+      });
+      faixaCodigo.setNumberFormat('@');
+      faixaCodigo.setValues(codigos);
+    }
+
+    console.log('CÓDIGOS NOVOS: ' + JSON.stringify({ gerados: novas.length, ja_no_app: conhecidas.length, sem_placa_e_celular: semContato.length }) +
+      (novas.length ? '\n  Gerados nas linhas: ' + novas.map(function (l) { return l + ' → ' + codigos[l - 2][0]; }).join(', ') : '') +
+      (conhecidas.length ? '\n  Já existem no app (rode preencherCodigos ou preencha à mão): ' + conhecidas.slice(0, 80).join(', ') : '') +
+      (semContato.length ? '\n  Sem placa e sem celular (preencha um dos dois): ' + semContato.slice(0, 80).map(function (l) { return l.linha; }).join(', ') : ''));
+  } finally {
+    trava.releaseLock();
+  }
+}
+
+/** Todos os códigos que já existem no app (lidos pela mesma rota do backup). */
+function codigosDoApp_() {
+  const resposta = UrlFetchApp.fetch(CONFIG.URL_FUNCAO, {
+    method: 'post',
+    contentType: 'application/json',
+    headers: { 'x-sync-token': token_() },
+    payload: JSON.stringify({ acao: 'backup' }),
+    muteHttpExceptions: true,
+  });
+  if (resposta.getResponseCode() !== 200) throw new Error('Falha ao ler os códigos do app (' + resposta.getResponseCode() + '): ' + resposta.getContentText());
+  const dados = JSON.parse(resposta.getContentText());
+  if (dados.erro) throw new Error('Falha ao ler os códigos do app: ' + dados.erro);
+  return (dados.motoristas || []).map(function (m) { return m.codigo; });
 }
 
 // ---------------------------------------------------------------------

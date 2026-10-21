@@ -15,7 +15,8 @@ Planilha ──Apps Script, a cada 15 min──▶ Edge Function sincronizar-pla
 ## Regras importantes
 
 - **RG e endereço nunca saem da planilha.** O script lê coluna por coluna e só as permitidas: código, nome, celular, placa, galpão, modal, data e motivo, e, **só da aba ATIVOS**, CPF, "Realizou rotas", "Qntd rotas" e "Ultima Rota". A Edge Function descarta qualquer outro campo, e o CPF de linhas da aba INATIVOS.
-- **O código é o que identifica o motorista.** Na aba ATIVOS, só linhas **com código** são enviadas. Na aba INATIVOS, o app procura pelo código; se não houver código, procura pela placa e depois pelo celular.
+- **O código é o que identifica o motorista.** Na aba ATIVOS, só linhas **com código** são enviadas.
+- **Código automático para motorista novo.** O código é um controle interno no formato `M0418`. A cada sincronização, a função `gerarCodigosNovos` dá o próximo número livre (maior código usado nas duas abas ou no app + 1) às linhas da aba ATIVOS sem código, com nome e placa ou celular, que o app **não** encontra nem pela placa nem pelo celular. Se o app já conhece a placa ou o celular, a linha não recebe código novo e aparece no registro para ser resolvida com `preencherCodigos` ou à mão; isso inclui a placa nova de um motorista que já existe, que precisa de um código próprio digitado à mão. Na aba INATIVOS, o app procura pelo código; se não houver código, procura pela placa e depois pelo celular.
 - **Cada linha da aba INATIVOS é aplicada uma única vez.** Se um dispatcher reativar o motorista no app, a mesma linha não o inativa de novo.
 - **Inativações antigas não disparam alerta de "novo".** O histórico usa a data da planilha.
 - **Voltar um motorista para a aba ATIVOS não o reativa no app.** A reativação é feita por um dispatcher, no app, para evitar que planilha e app fiquem "brigando" a cada 15 minutos.
@@ -53,7 +54,7 @@ O mesmo script faz uma cópia de segurança toda semana, aos domingos às 3h. O 
 
 ## No dia a dia
 
-- **Motorista novo:** cadastre na aba ATIVOS **com o código** preenchido. Em até 15 minutos ele aparece no app como ativo.
+- **Motorista novo:** cadastre na aba ATIVOS com nome, placa ou celular e galpão, e deixe o código em branco. Na próxima sincronização ele recebe o código (`M0419`...) e, em até 15 minutos, aparece no app como ativo.
 - **Inativar:** mova a linha para a aba INATIVOS (de preferência com a data e o motivo). Em até 15 minutos ele fica inativo no app, e os dispatchers do galpão recebem o alerta.
 - **Mudou celular, placa ou galpão:** altere na aba ATIVOS; o app atualiza em até 15 minutos.
 
@@ -84,7 +85,8 @@ O script encontra as colunas pelo **nome do cabeçalho**, sem diferenciar maiús
 | `Falha ao enviar … (401)` | o token do script é diferente do secret do Supabase; copie de novo do arquivo |
 | `Aba "…" não encontrada` | o nome da aba mudou; ajuste `CONFIG.ABA_ATIVOS` ou `CONFIG.ABA_INATIVOS` no script |
 | `Aba ATIVOS sem coluna "codigo"` | rode `preencherCodigos` |
-| `ATIVOS: {… "sem_codigo": N}` | há N linhas sem código na aba ATIVOS; elas não são enviadas até receberem um código |
+| `ATIVOS: {… "sem_codigo": N}` | linhas sem código na aba ATIVOS, que não são enviadas. O número também conta linhas vazias no fim da aba; veja as pendências reais na linha `CÓDIGOS NOVOS` |
+| `CÓDIGOS NOVOS: {… "ja_no_app": N}` | a placa ou o celular já existe no app: rode `preencherCodigos`, ou digite um código próprio se for outra placa da mesma pessoa |
 | `galpão inválido` | o galpão da linha não é um dos 10 galpões; corrija na planilha |
 
 ## Trocar o token (se vazar)
