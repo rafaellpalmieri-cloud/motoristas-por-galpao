@@ -11,6 +11,8 @@
  *                          o app ainda não conhece. Também roda dentro do sincronizarTudo.
  *  - sincronizarTudo    → gera códigos novos, envia ATIVOS (novos e dados atualizados)
  *                          e depois INATIVOS (inativações).
+ *  - conferirAtivos     → só leitura: lista as linhas da aba ATIVOS que não estão
+ *                          ativas no site (inativas no app, código inexistente/repetido).
  *  - instalarGatilho    → UMA vez: agenda sincronizarTudo a cada 15 minutos e o
  *                          backup semanal (domingo de madrugada).
  *  - fazerBackup        → salva no seu Google Drive uma cópia (CSV) de motoristas,
@@ -314,8 +316,55 @@ function gerarCodigosNovos() {
   }
 }
 
-/** Todos os códigos que já existem no app (lidos pela mesma rota do backup). */
+/**
+ * Só leitura: compara a aba ATIVOS com o app e lista as linhas que não aparecem
+ * como ativas no site (inativas no app, código inexistente, código repetido ou sem código).
+ */
+function conferirAtivos() {
+  const aba = aba_(CONFIG.ABA_ATIVOS);
+  const pos = posicoes_(aba);
+  if (pos.codigo === undefined) throw new Error('Aba ATIVOS sem coluna "codigo": rode preencherCodigos primeiro.');
+  const doApp = {};
+  motoristasDoApp_().forEach(function (m) { doApp[String(m.codigo).trim()] = m; });
+
+  const linhas = lerLinhas_(aba, pos, ['codigo', 'nome_completo', 'placa', 'galpao'])
+    .filter(function (l) { return l.codigo || l.nome_completo; });
+  const vistos = {};
+  const inativos = [];
+  const naoExistem = [];
+  const repetidos = [];
+  const semCodigo = [];
+  let ativos = 0;
+  linhas.forEach(function (l) {
+    const desc = 'linha ' + l.linha + ': ' + (l.codigo ? l.codigo + ' ' : '') + (l.nome_completo || '(sem nome)') +
+      (l.placa ? ' · ' + l.placa : '') + (l.galpao ? ' · ' + l.galpao : '');
+    if (!l.codigo) { semCodigo.push(desc); return; }
+    if (vistos[l.codigo]) { repetidos.push(desc + ' (mesmo código da linha ' + vistos[l.codigo] + ')'); return; }
+    vistos[l.codigo] = l.linha;
+    const m = doApp[l.codigo];
+    if (!m) naoExistem.push(desc);
+    else if (m.status !== 'ativo') {
+      inativos.push(desc + ' → no app: ' + m.status +
+        (m.inativo_desde ? ' desde ' + String(m.inativo_desde).slice(0, 10) : '') +
+        (m.motivo_inativacao ? ' (' + m.motivo_inativacao + ')' : ''));
+    } else ativos++;
+  });
+
+  const bloco = function (titulo, itens) { return itens.length ? '\n\n' + titulo + ' (' + itens.length + '):\n  ' + itens.join('\n  ') : ''; };
+  console.log('CONFERÊNCIA ATIVOS: ' + linhas.length + ' linhas na planilha, ' + ativos + ' ativas no app.' +
+    bloco('Inativos no app', inativos) +
+    bloco('Código não existe no app', naoExistem) +
+    bloco('Código repetido na planilha', repetidos) +
+    bloco('Sem código', semCodigo));
+}
+
+/** Todos os códigos que já existem no app. */
 function codigosDoApp_() {
+  return motoristasDoApp_().map(function (m) { return m.codigo; });
+}
+
+/** Motoristas do app (lidos pela mesma rota do backup). */
+function motoristasDoApp_() {
   const resposta = UrlFetchApp.fetch(CONFIG.URL_FUNCAO, {
     method: 'post',
     contentType: 'application/json',
@@ -326,7 +375,7 @@ function codigosDoApp_() {
   if (resposta.getResponseCode() !== 200) throw new Error('Falha ao ler os códigos do app (' + resposta.getResponseCode() + '): ' + resposta.getContentText());
   const dados = JSON.parse(resposta.getContentText());
   if (dados.erro) throw new Error('Falha ao ler os códigos do app: ' + dados.erro);
-  return (dados.motoristas || []).map(function (m) { return m.codigo; });
+  return dados.motoristas || [];
 }
 
 // ---------------------------------------------------------------------
