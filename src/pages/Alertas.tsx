@@ -16,6 +16,7 @@ import {
 } from '../hooks/motoristas'
 import { agruparPedidos, useMeusPedidosDecididos } from '../hooks/solicitacoes'
 import { GALPOES, SEM_GALPAO } from '../lib/constantes'
+import { baixarCsv } from '../lib/csv'
 import { formatarData, formatarDataHora, tempoRelativo } from '../lib/datas'
 import { mensagemErro } from '../lib/erros'
 import { DIAS_CORTE, diasSemRota, paraCortar } from '../lib/rotas'
@@ -138,6 +139,56 @@ export default function Alertas() {
 
   const visiveis = aba === 'inativacoes' ? inativacoesVisiveis : aba === 'cortar' ? corteVisiveis : pedidosVisiveis
   const chavesNaoLidasVisiveis = visiveis.filter((i) => i.naoLido).map((i) => i.chave)
+
+  /** Exporta os alertas da aba atual, com os filtros aplicados. */
+  function exportarCsv() {
+    const lido = (naoLido: boolean) => (naoLido ? 'NÃO' : 'SIM')
+    const linhas: Record<string, unknown>[] =
+      aba === 'inativacoes'
+        ? inativacoesVisiveis.map(({ a, naoLido }) => ({
+            data: formatarDataHora(a.alterado_em),
+            nome: a.motoristas?.nome_completo ?? '',
+            placa: a.motoristas?.placa ?? '',
+            codigo: a.motoristas?.codigo ?? '',
+            galpao: a.galpao ?? '',
+            motivo: a.motivo ?? '',
+            observacao: a.observacao ?? '',
+            origem: a.origem === 'planilha' ? 'Planilha' : 'App',
+            por: a.alterado_por_nome ?? '',
+            lido: lido(naoLido),
+          }))
+        : aba === 'cortar'
+          ? corteVisiveis.map(({ m, dias, naoLido }) => ({
+              nome: m.nome_completo ?? '',
+              placa: m.placa ?? '',
+              codigo: m.codigo,
+              galpao: m.galpao ?? '',
+              celular: m.celular ?? '',
+              ultima_rota: m.ultima_rota ?? '',
+              dias_sem_rota: dias,
+              qtd_rotas: m.qtd_rotas ?? '',
+              lido: lido(naoLido),
+            }))
+          : pedidosVisiveis.flatMap(({ itens, naoLido }) =>
+              itens.map((s) => ({
+                tipo: s.tipo === 'reativacao' ? 'Reativação' : 'Inativação',
+                nome: s.motoristas?.nome_completo ?? '',
+                placa: s.motoristas?.placa ?? '',
+                codigo: s.motoristas?.codigo ?? '',
+                galpao: s.galpao ?? '',
+                motivo: s.motivo,
+                observacao: s.observacao ?? '',
+                situacao: s.status === 'aprovada' ? 'Aprovado' : 'Recusado',
+                decidido_por: s.decidido_por_nome ?? '',
+                decidido_em: s.decidido_em ? formatarDataHora(s.decidido_em) : '',
+                resposta: s.resposta ?? '',
+                lido: lido(naoLido),
+              })),
+            )
+    if (!linhas.length) return
+    const nome = { inativacoes: 'inativacoes', cortar: 'para-cortar', pedidos: 'meus-pedidos' }[aba]
+    baixarCsv(`alertas-${nome}-${hoje}.csv`, linhas, Object.keys(linhas[0]))
+  }
 
   function marcarComoLido(chaves: string[]) {
     marcar.mutate(chaves, { onError: (e) => toast(`Não foi possível marcar: ${mensagemErro(e)}`, 'erro') })
@@ -287,6 +338,11 @@ export default function Alertas() {
               {aba === 'inativacoes' ? ` de ${formatarData(de)} a ${formatarData(ate)}` : ''}
               {chavesNaoLidasVisiveis.length ? ` · ${chavesNaoLidasVisiveis.length} não lido(s)` : ''}
             </p>
+            {visiveis.length > 0 && (
+              <Botao variante="secundario" onClick={exportarCsv}>
+                ⬇ Exportar CSV
+              </Botao>
+            )}
             {chavesNaoLidasVisiveis.length > 0 && (
               <Botao
                 variante="secundario"

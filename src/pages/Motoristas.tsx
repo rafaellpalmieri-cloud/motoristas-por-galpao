@@ -7,6 +7,7 @@ import { Carregando, EstadoErro, EstadoVazio, Pagina } from '../components/ui'
 import { useCpfsCompletos, useMotoristas } from '../hooks/motoristas'
 import { usePendentes } from '../hooks/solicitacoes'
 import { GALPOES, SEM_GALPAO } from '../lib/constantes'
+import { baixarCsv } from '../lib/csv'
 import { mensagemErro } from '../lib/erros'
 import { DIAS_PARADO, diasSemRota, FAIXAS_SEM_ROTA, formatarCpf, nuncaRodou, parado } from '../lib/rotas'
 import type { Motorista } from '../lib/tipos'
@@ -121,6 +122,31 @@ export default function Motoristas() {
     return null
   }
 
+  /** Exporta as placas que estão na tela (com os filtros aplicados). CPF como aparece para quem exporta. */
+  function exportarCsv() {
+    const hoje = new Date().toLocaleDateString('sv-SE', { timeZone: 'America/Sao_Paulo' })
+    const linhas = pessoas.flatMap((placas) => {
+      const cpf = cpfDaPessoa(placas) ?? ''
+      return placas.map((m) => ({
+        codigo: m.codigo,
+        nome: m.nome_completo ?? '',
+        cpf,
+        celular: m.celular ?? '',
+        placa: m.placa ?? '',
+        modal: m.modal ?? '',
+        galpao: m.galpao ?? '',
+        status: m.status,
+        inativo_desde: m.inativo_desde ?? '',
+        motivo_inativacao: m.motivo_inativacao ?? '',
+        fez_rota: m.realizou_rotas == null ? '' : m.realizou_rotas ? 'SIM' : 'NÃO',
+        qtd_rotas: m.qtd_rotas ?? '',
+        ultima_rota: m.ultima_rota ?? '',
+        dias_sem_rota: diasSemRota(m) ?? '',
+      }))
+    })
+    baixarCsv(`motoristas-${hoje}.csv`, linhas, Object.keys(linhas[0]))
+  }
+
   function ehNovo(m: Motorista) {
     return (
       m.status === 'inativo' && !!vistosEm && m.atualizado_em > vistosEm && m.atualizado_por !== session?.user.id
@@ -192,10 +218,18 @@ export default function Motoristas() {
           {rota === 'parado' && <option value="parado">Sem rota há {DIAS_PARADO}+ dias</option>}
         </select>
         {data && (
-          <div className="flex gap-2 text-sm">
+          <div className="flex flex-wrap items-center gap-2 text-sm">
             <span className="rounded-full bg-emerald-100 px-3 py-1 font-semibold text-emerald-800">{contagem.ativos} motoristas ativos</span>
             <span className="rounded-full bg-rose-50 px-3 py-1 font-semibold text-rose-700">{contagem.inativos} inativos</span>
             <span className="px-1 py-1 text-slate-500">{doGalpao.length} placas</span>
+            <button
+              type="button"
+              onClick={exportarCsv}
+              disabled={!pessoas.length}
+              className="ml-auto inline-flex min-h-10 items-center gap-1 rounded-xl border border-slate-300 bg-white px-3 font-semibold text-slate-800 hover:bg-slate-50 disabled:opacity-50"
+            >
+              ⬇ Exportar CSV
+            </button>
           </div>
         )}
       </div>
