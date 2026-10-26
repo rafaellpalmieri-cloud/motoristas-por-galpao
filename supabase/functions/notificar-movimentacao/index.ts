@@ -269,12 +269,36 @@ async function enviarPush(admin: SupabaseClient, usuarios: string[], aviso: Avis
   if (!inscricoes?.length) return { enviados: 0, motivo: 'nenhum aparelho com notificação ativada' }
 
   webpush.setVapidDetails(SITE, publica, privada)
+  // Só serviços oficiais de push (o banco também impede outros endereços: proteção contra SSRF).
+  const HOSTS_PUSH = [
+    'fcm.googleapis.com',
+    'android.googleapis.com',
+    'updates.push.services.mozilla.com',
+    'web.push.apple.com',
+  ]
+  const oficial = {
+    test(endpoint: string) {
+      try {
+        const u = new URL(endpoint)
+        return (
+          u.protocol === 'https:' &&
+          (HOSTS_PUSH.includes(u.hostname) || u.hostname.endsWith('.push.apple.com') || u.hostname.endsWith('.notify.windows.com'))
+        )
+      } catch {
+        return false
+      }
+    },
+  }
   const carga = JSON.stringify(aviso)
   let enviados = 0
   const removidos: number[] = []
   const falhas: string[] = []
   await Promise.all(
     inscricoes.map(async (i) => {
+      if (!oficial.test(i.endpoint)) {
+        removidos.push(i.id)
+        return
+      }
       try {
         await webpush.sendNotification({ endpoint: i.endpoint, keys: { p256dh: i.p256dh, auth: i.auth } }, carga, {
           TTL: 6 * 3600,

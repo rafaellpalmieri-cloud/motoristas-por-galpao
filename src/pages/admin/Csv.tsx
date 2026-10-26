@@ -33,6 +33,15 @@ function Importar() {
     setLeitura(null)
     setArquivo(f ?? null)
     if (!f) return
+    // Só CSV, até 5 MB (cerca de 50 mil linhas): evita travar o navegador com arquivo errado.
+    if (!/\.csv$/i.test(f.name) && f.type !== 'text/csv') {
+      setArquivo(null)
+      return setErro('Escolha um arquivo .csv.')
+    }
+    if (f.size > 5 * 1024 * 1024) {
+      setArquivo(null)
+      return setErro('Arquivo muito grande (máximo 5 MB).')
+    }
     setLendo(true)
     try {
       setLeitura(await lerCsvMotoristas(f))
@@ -148,7 +157,7 @@ function Importar() {
 
           {leitura.erros.length > 0 && <ListaErros erros={leitura.erros} titulo="Linhas com erro (não serão enviadas)" />}
 
-          <Botao disabled={!leitura.validas.length} onClick={importar}>
+          <Botao disabled={!leitura.validas.length} carregando={importando} onClick={importar}>
             Importar {leitura.validas.length} linha(s)
           </Botao>
         </div>

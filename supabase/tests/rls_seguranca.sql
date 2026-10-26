@@ -1023,7 +1023,7 @@ set local role authenticated;
 do $$
 declare n integer;
 begin
-  perform public.registrar_push('https://push.exemplo.test/aparelho-1', 'chave-p256dh', 'chave-auth', 'teste');
+  perform public.registrar_push('https://fcm.googleapis.com/fcm/send/aparelho-1', 'chave-p256dh', 'chave-auth', 'teste');
   select count(*) into n from public.push_inscricoes;
   if n <> 1 then raise exception 'FALHOU: dispatcher não registrou a própria inscrição'; end if;
   raise notice 'OK: dispatcher registra notificação no próprio aparelho';
@@ -1032,6 +1032,12 @@ begin
     perform public.registrar_push('http://inseguro.test/x', 'a', 'b', null);
     raise exception 'FALHOU: aceitou endpoint sem https';
   exception when invalid_parameter_value then raise notice 'OK: inscrição sem https é recusada';
+  end;
+
+  begin
+    perform public.registrar_push('https://servidor-qualquer.example.com/x', 'a', 'b', null);
+    raise exception 'FALHOU: aceitou endereço de push fora dos serviços oficiais (SSRF)';
+  exception when invalid_parameter_value then raise notice 'OK: só serviços oficiais de push são aceitos (anti-SSRF)';
   end;
 
   begin
@@ -1052,12 +1058,12 @@ declare n integer;
 begin
   select count(*) into n from public.push_inscricoes;
   if n <> 0 then raise exception 'FALHOU: dispatcher viu inscrição de outro usuário'; end if;
-  perform public.remover_push('https://push.exemplo.test/aparelho-1');
+  perform public.remover_push('https://fcm.googleapis.com/fcm/send/aparelho-1');
   raise notice 'OK: dispatcher não vê nem remove inscrição de outro usuário';
 
   -- Mesmo navegador usado por outra pessoa: passa a ser de quem entrou agora.
-  perform public.registrar_push('https://push.exemplo.test/aparelho-1', 'chave-p256dh', 'chave-auth', 'teste');
-  select count(*) into n from public.push_inscricoes where endpoint = 'https://push.exemplo.test/aparelho-1';
+  perform public.registrar_push('https://fcm.googleapis.com/fcm/send/aparelho-1', 'chave-p256dh', 'chave-auth', 'teste');
+  select count(*) into n from public.push_inscricoes where endpoint = 'https://fcm.googleapis.com/fcm/send/aparelho-1';
   if n <> 1 then raise exception 'FALHOU: aparelho compartilhado não trocou de dono'; end if;
   raise notice 'OK: aparelho compartilhado fica com quem entrou por último';
 end;
