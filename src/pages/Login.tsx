@@ -25,7 +25,7 @@ export default function Login() {
   }
 
   return (
-    <TelaAuth titulo="Motoristas por Galpão" subtitulo="Entre com seu e-mail e senha">
+    <TelaAuth titulo="LoogiRio Frota" subtitulo="Motoristas e placas por galpão. Entre com seu e-mail e senha.">
       <form onSubmit={entrar} className="flex flex-col gap-4">
         <Campo
           rotulo="E-mail"

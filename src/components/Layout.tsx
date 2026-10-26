@@ -3,6 +3,7 @@ import { useAuth } from '../auth/AuthProvider'
 import { useContagemAlertas } from '../hooks/motoristas'
 import { agruparPedidos, usePendentes } from '../hooks/solicitacoes'
 import { FaixaNotificacoes } from './AtivarNotificacoes'
+import { BotaoTema } from './BotaoTema'
 import { IconeDocumento, IconeEquipe, IconeGrafico, IconeMotoristas, IconeSair, IconeSino } from './Icones'
 
 type Icone = (p: { cheio?: boolean; className?: string }) => React.ReactNode
@@ -18,6 +19,7 @@ function ItemNav({ para, Icone, rotulo, selo }: { para: string; Icone: Icone; ro
     >
       {({ isActive }) => (
         <>
+          {isActive && <span className="absolute top-0 h-[3px] w-7 rounded-b-full bg-laranja" aria-hidden />}
           <Icone cheio={isActive} className="h-[26px] w-[26px]" />
           {rotulo}
           {!!selo && (
@@ -38,12 +40,14 @@ export function Layout() {
 
   return (
     <div className="min-h-dvh bg-slate-50">
-      <header className="vidro sticky top-0 z-20 border-b border-black/10">
+      <header className="vidro sticky top-0 z-20">
         <div className="mx-auto flex max-w-3xl items-center justify-between gap-2 px-4 py-1.5">
           <div className="flex min-w-0 items-center gap-2.5">
             <img src="/marca/simbolo-loogirio.png" alt="LoogiRio" className="h-8 w-auto shrink-0" />
             <div className="min-w-0">
-            <p className="text-[15px] font-semibold tracking-tight text-slate-900">Motoristas por Galpão</p>
+            <p className="text-[15px] font-semibold tracking-tight text-slate-900">
+              LoogiRio <span className="text-sky-600">Frota</span>
+            </p>
             <p className="truncate text-[12px] text-slate-500">
               {usuario?.perfil?.nome}
               {ehAdmin ? ' · Admin' : usuario?.galpoes.length ? ` · ${usuario.galpoes.join(', ')}` : ''}
@@ -51,6 +55,7 @@ export function Layout() {
             </div>
           </div>
           <div className="flex items-center">
+            <BotaoTema className="text-sky-600" />
             <NavLink
               to="/alertas"
               aria-label={alertas ? `${alertas} alertas novos` : 'Alertas'}
@@ -74,6 +79,8 @@ export function Layout() {
             </button>
           </div>
         </div>
+        {/* Faixa da marca: laranja → amarelo, discreta. */}
+        <div className="h-[2px] bg-gradient-to-r from-laranja via-amarelo to-sky-600" aria-hidden />
       </header>
 
       <FaixaNotificacoes />

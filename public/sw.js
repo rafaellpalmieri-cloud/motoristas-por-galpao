@@ -1,11 +1,11 @@
-// Service worker do Motoristas por Galpão: recebe e mostra as notificações push.
+// Service worker do LoogiRio Frota: recebe e mostra as notificações push.
 // Não faz cache de páginas (o app sempre busca a versão mais nova).
 
 self.addEventListener('install', () => self.skipWaiting())
 self.addEventListener('activate', (evento) => evento.waitUntil(self.clients.claim()))
 
 self.addEventListener('push', (evento) => {
-  let aviso = { title: 'Motoristas por Galpão', body: '', url: '/', tag: undefined }
+  let aviso = { title: 'LoogiRio Frota', body: '', url: '/', tag: undefined }
   try {
     aviso = { ...aviso, ...evento.data.json() }
   } catch {

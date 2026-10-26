@@ -3,14 +3,22 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="color-scheme" content="light dark" />
     <meta name="theme-color" content="#f9f9f9" />
-    <meta name="description" content="LoogiRio — motoristas por galpão." />
+    <meta name="description" content="LoogiRio Frota: motoristas e placas por galpão." />
     <link rel="icon" type="image/png" href="/icons/icon-192.png" />
     <link rel="apple-touch-icon" href="/icons/icon-192.png" />
     <link rel="manifest" href="/manifest.webmanifest" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-title" content="Motoristas" />
-    <title>Motoristas por Galpão</title>
+    <meta name="apple-mobile-web-app-title" content="Loogi Frota" />
+    <script>
+      try {
+        var t = localStorage.getItem('tema')
+        if (t !== 'claro' && t !== 'escuro') t = matchMedia('(prefers-color-scheme: dark)').matches ? 'escuro' : 'claro'
+        document.documentElement.dataset.tema = t
+      } catch (e) {}
+    </script>
+    <title>LoogiRio Frota</title>
   </head>
   <body>
     <div id="root"></div>

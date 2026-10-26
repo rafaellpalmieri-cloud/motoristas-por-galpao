@@ -1,8 +1,11 @@
-# CLAUDE.md — Motoristas por Galpão
+# CLAUDE.md — LoogiRio Frota (antigo "Motoristas por Galpão")
 
 Instruções para o Claude (e para quem mantiver o projeto). Leia antes de mexer.
 
 ## O que é
+
+Nome do app: **LoogiRio Frota** (ícone: "Loogi Frota"). Visual: estilo iOS com as cores da LoogiRio (azul #0042F6, laranja #FC6600, marinho #010349), tema claro/escuro (botão no topo; padrão = tema do aparelho). O endereço continua motoristas-por-galpao.vercel.app.
+
 
 App web mobile-first (pt-BR) em que dispatchers dos galpões SRJ1, SRJ2, SRJ4, SRJ5, SRJ8, SRJ9, SRJ10, SRJ13, SRJ17 e HUB acompanham motoristas e pedem inativações; admins aprovam. Stack: Vite + React + TypeScript + Tailwind + React Router + TanStack Query + supabase-js; backend Supabase (Postgres + RLS, Auth, Edge Functions em Deno, pg_cron, pg_net, Vault). Visão geral e passo a passo de implantação: `README.md`.
 

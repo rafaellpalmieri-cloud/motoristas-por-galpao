@@ -1,7 +1,7 @@
 {
-  "name": "Motoristas por Galpão · LoogiRio",
-  "short_name": "Motoristas",
-  "description": "Marque motoristas como ativos ou inativos por galpão.",
+  "name": "LoogiRio Frota",
+  "short_name": "Loogi Frota",
+  "description": "LoogiRio Frota: motoristas e placas por galpão.",
   "lang": "pt-BR",
   "start_url": "/",
   "scope": "/",
