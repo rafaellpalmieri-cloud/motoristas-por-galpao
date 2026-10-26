@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { useState, type ReactNode } from 'react'
+import { IconeBaixar } from '../../components/Icones'
 import { Botao, Carregando, Cartao, EstadoErro, Pagina } from '../../components/ui'
 import { baixarCsv } from '../../lib/csv'
 import { mensagemErro } from '../../lib/erros'
@@ -113,7 +114,7 @@ export default function RelatorioMensal() {
           />
         </label>
         <Botao variante="secundario" disabled={!data} onClick={exportar}>
-          ⬇️ Exportar CSV
+          <IconeBaixar className="h-5 w-5" /> Exportar CSV
         </Botao>
       </div>
 

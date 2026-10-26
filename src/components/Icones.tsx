@@ -91,3 +91,19 @@ export function IconeSair(p: Props) {
     </Base>
   )
 }
+
+export function IconeTelefone(p: Props) {
+  return (
+    <Base {...p}>
+      <path d="M6.6 3.5h2.2l1.6 4-2 1.3a11 11 0 0 0 6.8 6.8l1.3-2 4 1.6v2.2a2 2 0 0 1-2 2A15.5 15.5 0 0 1 4.6 5.5a2 2 0 0 1 2-2Z" />
+    </Base>
+  )
+}
+
+export function IconeBaixar(p: Props) {
+  return (
+    <Base {...p}>
+      <path d="M12 4v11M7.5 10.5 12 15l4.5-4.5M5 19.5h14" />
+    </Base>
+  )
+}

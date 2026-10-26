@@ -54,7 +54,7 @@ export function CartaoNotificacoes() {
 
   return (
     <div className="mb-4 rounded-2xl border border-sky-200 bg-sky-50 p-4">
-      <p className="font-semibold text-sky-900">🔔 Notificações neste aparelho</p>
+      <p className="font-semibold text-sky-900">Notificações neste aparelho</p>
       {estado === 'ativado' && (
         <>
           <p className="mt-1 text-sm text-sky-900">

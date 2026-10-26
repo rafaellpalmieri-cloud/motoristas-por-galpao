@@ -1,9 +1,11 @@
 @import 'tailwindcss';
 
 /*
- * Visual inspirado nos apps nativos do iOS: fonte do sistema, fundo cinza
- * agrupado, cartões brancos, cores do sistema (azul, verde, vermelho, laranja)
- * e cinzas neutros. As paletas do Tailwind usadas no app (sky, emerald, rose,
+ * Visual inspirado nos apps nativos do iOS (fonte do sistema, fundo cinza
+ * agrupado, cartões brancos) com as cores da LoogiRio: azul #0042F6 (ações),
+ * laranja #FC6600 (destaques/atenção) e marinho #010349 (ícone). Verde e
+ * vermelho de status seguem o padrão do sistema para leitura imediata.
+ * As paletas do Tailwind usadas no app (sky, emerald, rose,
  * amber, orange, violet, slate) são remapeadas aqui, então todas as telas
  * seguem o mesmo padrão sem precisar trocar classe por classe.
  */
@@ -11,17 +13,17 @@
   --font-sans: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', 'Segoe UI Variable', 'Segoe UI',
     system-ui, Roboto, 'Helvetica Neue', Arial, sans-serif;
 
-  /* Azul do sistema (ações, links, item ativo) */
-  --color-sky-50: #eef5ff;
-  --color-sky-100: #dcebff;
-  --color-sky-200: #b8d7ff;
-  --color-sky-300: #8cbfff;
-  --color-sky-400: #4a9dff;
-  --color-sky-500: #1a85ff;
-  --color-sky-600: #007aff;
-  --color-sky-700: #007aff;
-  --color-sky-800: #0064d2;
-  --color-sky-900: #004da3;
+  /* Azul LoogiRio (ações, links, item ativo) */
+  --color-sky-50: #edf2ff;
+  --color-sky-100: #dbe5ff;
+  --color-sky-200: #b3c8ff;
+  --color-sky-300: #809fff;
+  --color-sky-400: #4d77fb;
+  --color-sky-500: #1f55f8;
+  --color-sky-600: #0042f6;
+  --color-sky-700: #0042f6;
+  --color-sky-800: #0035c4;
+  --color-sky-900: #010349;
 
   /* Verde do sistema (ativo) */
   --color-emerald-50: #ebf9ef;
@@ -49,9 +51,12 @@
   --color-amber-300: #ffcc66;
   --color-amber-800: #a05a00;
   --color-amber-900: #7a4400;
-  --color-orange-100: #ffebd6;
-  --color-orange-600: #ff9500;
-  --color-orange-800: #b35f00;
+  --color-orange-100: #ffe8d6;
+  --color-orange-600: #fc6600;
+  --color-orange-800: #b34700;
+
+  /* Marinho LoogiRio */
+  --color-marinho: #010349;
 
   /* Roxo do sistema (selo "Planilha") */
   --color-violet-100: #f1e6ff;

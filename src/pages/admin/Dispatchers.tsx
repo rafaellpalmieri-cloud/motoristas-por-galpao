@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState, type FormEvent } from 'react'
 import { useAuth } from '../../auth/AuthProvider'
+import { IconeTelefone } from '../../components/Icones'
 import { useToast } from '../../components/Toast'
 import { Botao, Campo, Carregando, EstadoErro, EstadoVazio, Modal, Pagina } from '../../components/ui'
 import { GALPOES } from '../../lib/constantes'
@@ -54,7 +55,7 @@ function Contato({ telefone, nome }: { telefone: string | null; nome: string }) 
         aria-label={`Ligar para ${nome}`}
         className="inline-flex min-h-11 items-center gap-1 rounded-xl border border-slate-300 px-3 text-sm text-slate-800 hover:bg-slate-50"
       >
-        📞 {formatarCelular(telefone)}
+        <IconeTelefone className="h-4 w-4 text-sky-600" /> {formatarCelular(telefone)}
       </a>
       {wa && (
         <a

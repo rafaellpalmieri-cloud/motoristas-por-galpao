@@ -3,6 +3,7 @@ import { formatarData } from '../lib/datas'
 import { diasDesdeUltimaRota, nuncaRodou, parado } from '../lib/rotas'
 import { formatarCelular, linkTelefone, linkWhatsApp } from '../lib/telefone'
 import type { Motorista, Solicitacao } from '../lib/tipos'
+import { IconeTelefone } from './Icones'
 import type { AlvoStatus } from './ModalStatus'
 import { BadgeStatus, Botao } from './ui'
 
@@ -73,7 +74,7 @@ export function CardPessoa({
             className="inline-flex min-h-11 items-center gap-1 rounded-xl border border-slate-300 px-3 text-slate-800 hover:bg-slate-50"
             aria-label={`Ligar para ${principal.nome_completo ?? 'motorista'}`}
           >
-            📞 <span className="text-sm">{formatarCelular(principal.celular)}</span>
+            <IconeTelefone className="h-4 w-4 text-sky-600" /> <span className="text-sm">{formatarCelular(principal.celular)}</span>
           </a>
         ) : (
           <span className="text-sm text-slate-400">Sem celular</span>

@@ -1,5 +1,6 @@
 import { useState, type ReactNode } from 'react'
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
+import { IconeTelefone } from '../components/Icones'
 import { ModalStatus, type AlvoStatus } from '../components/ModalStatus'
 import { BadgeStatus, Botao, Carregando, Cartao, EstadoErro, EstadoVazio, Pagina, SeloPlanilha } from '../components/ui'
 import { CartaoSolicitacao } from '../components/CartaoSolicitacao'
@@ -87,7 +88,7 @@ export default function MotoristaDetalhe() {
         <div className="mt-4 grid grid-cols-2 gap-2">
           {tel && (
             <a href={tel} className="flex min-h-11 items-center justify-center rounded-xl border border-slate-300 font-semibold text-slate-800">
-              📞 Ligar
+              <IconeTelefone className="mr-1.5 h-5 w-5 text-sky-600" /> Ligar
             </a>
           )}
           {wa && (

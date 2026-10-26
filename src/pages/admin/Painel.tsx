@@ -73,13 +73,13 @@ export default function Painel() {
     <Pagina titulo="Painel">
       <div className="mb-4 grid grid-cols-3 gap-2">
         <Link to="/admin/dispatchers" className="flex min-h-12 items-center justify-center rounded-xl border border-slate-300 bg-white text-sm font-semibold text-sky-800">
-          👥 Equipe
+          Equipe
         </Link>
         <Link to="/admin/relatorio" className="flex min-h-12 items-center justify-center rounded-xl border border-slate-300 bg-white text-sm font-semibold text-sky-800">
-          📈 Relatório
+          Relatório
         </Link>
         <Link to="/admin/importar" className="flex min-h-12 items-center justify-center rounded-xl border border-slate-300 bg-white text-sm font-semibold text-sky-800">
-          📄 CSV
+          CSV
         </Link>
       </div>
 

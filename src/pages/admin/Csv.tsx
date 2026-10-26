@@ -1,5 +1,6 @@
 import { useQueryClient } from '@tanstack/react-query'
 import { useRef, useState } from 'react'
+import { IconeBaixar } from '../../components/Icones'
 import { useToast } from '../../components/Toast'
 import { Botao, Cartao, Pagina } from '../../components/ui'
 import { baixarCsv, COLUNAS_CSV, COLUNAS_OPCIONAIS_CSV,lerCsvMotoristas, type ErroLinha, type ResultadoLeitura } from '../../lib/csv'
@@ -269,7 +270,7 @@ function Exportar() {
         Todos os motoristas com status atual, data e autor da última alteração. Abre direto no Excel e no Google Sheets.
       </p>
       <Botao variante="secundario" className="mt-4 w-full" carregando={exportando} onClick={exportar}>
-        ⬇️ Baixar CSV
+        <IconeBaixar className="h-5 w-5" /> Baixar CSV
       </Botao>
     </Cartao>
   )

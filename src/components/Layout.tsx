@@ -40,12 +40,15 @@ export function Layout() {
     <div className="min-h-dvh bg-slate-50">
       <header className="vidro sticky top-0 z-20 border-b border-black/10">
         <div className="mx-auto flex max-w-3xl items-center justify-between gap-2 px-4 py-1.5">
-          <div className="min-w-0">
+          <div className="flex min-w-0 items-center gap-2.5">
+            <img src="/marca/simbolo-loogirio.png" alt="LoogiRio" className="h-8 w-auto shrink-0" />
+            <div className="min-w-0">
             <p className="text-[15px] font-semibold tracking-tight text-slate-900">Motoristas por Galpão</p>
             <p className="truncate text-[12px] text-slate-500">
               {usuario?.perfil?.nome}
               {ehAdmin ? ' · Admin' : usuario?.galpoes.length ? ` · ${usuario.galpoes.join(', ')}` : ''}
             </p>
+            </div>
           </div>
           <div className="flex items-center">
             <NavLink
