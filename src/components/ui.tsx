@@ -46,6 +46,7 @@ export function Campo({
       </label>
       <input
         id={id}
+        maxLength={200}
         {...resto}
         className="min-h-11 rounded-xl border border-transparent bg-white px-4 py-2.5 text-[17px] text-slate-900 shadow-[inset_0_0_0_0.5px_rgb(0_0_0/0.08)] placeholder:text-slate-400 focus:border-sky-600 focus:outline-none focus:ring-4 focus:ring-sky-100"
       />
