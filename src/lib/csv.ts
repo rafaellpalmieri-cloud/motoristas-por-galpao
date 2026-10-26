@@ -105,7 +105,7 @@ export function lerCsvMotoristas(arquivo: File): Promise<ResultadoLeitura> {
 /** Gera CSV com BOM UTF-8 e separador ";" (abre direto no Excel em pt-BR e no Sheets). */
 /** Evita que um texto seja executado como fórmula ao abrir no Excel/Sheets. */
 function celulaSegura(v: unknown): unknown {
-  return typeof v === 'string' && /^[=+-@	]/.test(v) ? "'" + v : (v ?? '')
+  return typeof v === 'string' && ['=', '+', '-', '@'].includes(v.charAt(0)) ? "'" + v : (v ?? '')
 }
 
 export function baixarCsv(nomeArquivo: string, linhas: Record<string, unknown>[], colunas: string[]) {
