@@ -3,12 +3,13 @@ import type { Status } from '../lib/tipos'
 
 type Variante = 'primario' | 'secundario' | 'perigo' | 'sucesso' | 'fantasma'
 
+// Botões no estilo iOS: preenchido (azul/vermelho/verde) ou "cinza translúcido" com texto colorido.
 const estilosVariante: Record<Variante, string> = {
-  primario: 'bg-sky-700 text-white hover:bg-sky-800 active:bg-sky-900',
-  secundario: 'bg-white text-slate-800 border border-slate-300 hover:bg-slate-50 active:bg-slate-100',
-  perigo: 'bg-rose-600 text-white hover:bg-rose-700 active:bg-rose-800',
-  sucesso: 'bg-emerald-600 text-white hover:bg-emerald-700 active:bg-emerald-800',
-  fantasma: 'bg-transparent text-sky-800 hover:bg-sky-50 active:bg-sky-100',
+  primario: 'bg-sky-600 text-white active:opacity-80',
+  secundario: 'bg-[rgb(118_118_128/0.12)] text-sky-700 active:bg-[rgb(118_118_128/0.2)]',
+  perigo: 'bg-rose-600 text-white active:opacity-80',
+  sucesso: 'bg-emerald-500 text-white active:opacity-80',
+  fantasma: 'bg-transparent text-sky-700 active:opacity-60',
 }
 
 export function Botao({
@@ -23,7 +24,7 @@ export function Botao({
     <button
       {...resto}
       disabled={disabled || carregando}
-      className={`inline-flex min-h-11 items-center justify-center gap-2 rounded-xl px-4 py-2 text-base font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-600 disabled:cursor-not-allowed disabled:opacity-60 ${estilosVariante[variante]} ${className}`}
+      className={`inline-flex min-h-11 items-center justify-center gap-2 rounded-xl px-4 py-2 text-[17px] font-semibold tracking-[-0.02em] transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-600 disabled:cursor-not-allowed disabled:opacity-40 ${estilosVariante[variante]} ${className}`}
     >
       {carregando && <Spinner pequeno />}
       {children}
@@ -39,17 +40,17 @@ export function Campo({
 }: InputHTMLAttributes<HTMLInputElement> & { rotulo: string; dica?: string; erro?: string | null }) {
   const id = useId()
   return (
-    <div className="flex flex-col gap-1">
-      <label htmlFor={id} className="text-sm font-medium text-slate-700">
+    <div className="flex flex-col gap-1.5">
+      <label htmlFor={id} className="px-1 text-[13px] font-medium uppercase tracking-wide text-slate-500">
         {rotulo}
       </label>
       <input
         id={id}
         {...resto}
-        className="min-h-11 rounded-xl border border-slate-300 bg-white px-3 py-2 text-base text-slate-900 placeholder:text-slate-400 focus:border-sky-600 focus:outline-none focus:ring-2 focus:ring-sky-200"
+        className="min-h-11 rounded-xl border border-transparent bg-white px-4 py-2.5 text-[17px] text-slate-900 shadow-[inset_0_0_0_0.5px_rgb(0_0_0/0.08)] placeholder:text-slate-400 focus:border-sky-600 focus:outline-none focus:ring-4 focus:ring-sky-100"
       />
-      {dica && !erro && <p className="text-sm text-slate-500">{dica}</p>}
-      {erro && <p className="text-sm text-rose-700">{erro}</p>}
+      {dica && !erro && <p className="px-1 text-[13px] text-slate-500">{dica}</p>}
+      {erro && <p className="px-1 text-[13px] text-rose-700">{erro}</p>}
     </div>
   )
 }
@@ -59,16 +60,16 @@ export function Spinner({ pequeno = false }: { pequeno?: boolean }) {
     <span
       role="status"
       aria-label="Carregando"
-      className={`inline-block animate-spin rounded-full border-2 border-current border-r-transparent ${pequeno ? 'h-4 w-4' : 'h-8 w-8'}`}
+      className={`inline-block animate-spin rounded-full border-2 border-current border-r-transparent opacity-70 ${pequeno ? 'h-4 w-4' : 'h-7 w-7'}`}
     />
   )
 }
 
 export function Carregando({ texto = 'Carregando…' }: { texto?: string }) {
   return (
-    <div className="flex flex-col items-center justify-center gap-3 py-16 text-slate-500">
+    <div className="flex flex-col items-center justify-center gap-3 py-16 text-slate-400">
       <Spinner />
-      <p>{texto}</p>
+      <p className="text-[15px]">{texto}</p>
     </div>
   )
 }
@@ -76,20 +77,20 @@ export function Carregando({ texto = 'Carregando…' }: { texto?: string }) {
 export function EstadoVazio({ titulo, children }: { titulo: string; children?: ReactNode }) {
   return (
     <div className="mx-auto flex max-w-sm flex-col items-center gap-2 px-4 py-14 text-center">
-      <div className="text-4xl" aria-hidden>
-        📭
-      </div>
-      <p className="text-lg font-semibold text-slate-700">{titulo}</p>
-      {children && <div className="text-slate-500">{children}</div>}
+      <svg aria-hidden viewBox="0 0 24 24" className="mb-1 h-12 w-12 text-slate-300" fill="none" stroke="currentColor" strokeWidth="1.5">
+        <path d="M3 13h4l2 3h6l2-3h4M5 13l2-8h10l2 8v6a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1v-6Z" strokeLinejoin="round" />
+      </svg>
+      <p className="text-[20px] font-semibold tracking-tight text-slate-800">{titulo}</p>
+      {children && <div className="text-[15px] text-slate-500">{children}</div>}
     </div>
   )
 }
 
 export function EstadoErro({ mensagem, aoTentarDeNovo }: { mensagem: string; aoTentarDeNovo?: () => void }) {
   return (
-    <div role="alert" className="mx-auto my-6 flex max-w-sm flex-col items-center gap-3 rounded-2xl border border-rose-200 bg-rose-50 p-5 text-center">
-      <p className="font-semibold text-rose-800">Algo deu errado</p>
-      <p className="text-sm text-rose-700">{mensagem}</p>
+    <div role="alert" className="mx-auto my-6 flex max-w-sm flex-col items-center gap-3 rounded-2xl bg-white p-6 text-center">
+      <p className="text-[17px] font-semibold text-slate-900">Algo deu errado</p>
+      <p className="text-[15px] text-slate-500">{mensagem}</p>
       {aoTentarDeNovo && (
         <Botao variante="secundario" onClick={aoTentarDeNovo}>
           Tentar de novo
@@ -101,13 +102,13 @@ export function EstadoErro({ mensagem, aoTentarDeNovo }: { mensagem: string; aoT
 
 export function BadgeStatus({ status }: { status: Status }) {
   return status === 'ativo' ? (
-    <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2.5 py-0.5 text-sm font-semibold text-emerald-800">
-      <span className="h-2 w-2 rounded-full bg-emerald-500" aria-hidden />
+    <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-0.5 text-[13px] font-semibold text-emerald-700">
+      <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" aria-hidden />
       Ativo
     </span>
   ) : (
-    <span className="inline-flex items-center gap-1 rounded-full bg-rose-50 px-2.5 py-0.5 text-sm font-semibold text-rose-700">
-      <span className="h-2 w-2 rounded-full bg-rose-400" aria-hidden />
+    <span className="inline-flex items-center gap-1.5 rounded-full bg-rose-50 px-2.5 py-0.5 text-[13px] font-semibold text-rose-700">
+      <span className="h-1.5 w-1.5 rounded-full bg-rose-600" aria-hidden />
       Inativo
     </span>
   )
@@ -115,11 +116,10 @@ export function BadgeStatus({ status }: { status: Status }) {
 
 /** Marca mudanças que vieram da planilha interna (Google Sheets). */
 export function SeloPlanilha() {
-  return (
-    <span className="rounded-full bg-violet-100 px-2 py-0.5 text-xs font-bold uppercase text-violet-800">Planilha</span>
-  )
+  return <span className="rounded-full bg-violet-100 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-violet-800">Planilha</span>
 }
 
+/** Janela: no celular sobe de baixo (folha), no computador fica centralizada. */
 export function Modal({
   aberto,
   titulo,
@@ -146,19 +146,28 @@ export function Modal({
         e.preventDefault()
         aoFechar()
       }}
-      className="m-auto w-[calc(100%-1.5rem)] max-w-md rounded-2xl p-0 shadow-xl backdrop:bg-slate-900/50"
+      onClick={(e) => {
+        // Toque fora da janela fecha (como no iOS).
+        if (e.target === e.currentTarget) aoFechar()
+      }}
+      className="folha mx-0 mb-0 mt-auto max-h-[92dvh] w-full max-w-none overflow-y-auto rounded-t-[20px] bg-slate-50 p-0 shadow-2xl sm:m-auto sm:max-w-md sm:rounded-[20px]"
     >
       {aberto && (
-        <div className="flex flex-col gap-4 p-5">
-          <div className="flex items-start justify-between gap-3">
-            <h2 className="text-lg font-bold text-slate-900">{titulo}</h2>
+        <div className="flex flex-col gap-4 px-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-2">
+          <div className="mx-auto h-1.5 w-10 rounded-full bg-slate-300 sm:hidden" aria-hidden />
+          <div className="flex items-center justify-between gap-3">
+            <h2 className="text-[20px] font-bold tracking-tight text-slate-900">{titulo}</h2>
             <button
               type="button"
               onClick={aoFechar}
               aria-label="Fechar"
-              className="-m-2 flex h-11 w-11 items-center justify-center rounded-full text-2xl text-slate-500 hover:bg-slate-100"
+              className="-mr-1 flex h-11 w-11 items-center justify-center rounded-full"
             >
-              ×
+              <span className="flex h-7 w-7 items-center justify-center rounded-full bg-[rgb(118_118_128/0.12)] text-slate-500">
+                <svg viewBox="0 0 12 12" className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                  <path d="M2 2l8 8M10 2l-8 8" />
+                </svg>
+              </span>
             </button>
           </div>
           {children}
@@ -169,14 +178,15 @@ export function Modal({
 }
 
 export function Cartao({ children, className = '' }: { children: ReactNode; className?: string }) {
-  return <div className={`rounded-2xl border border-slate-200 bg-white p-4 shadow-sm ${className}`}>{children}</div>
+  return <div className={`rounded-2xl bg-white p-4 ${className}`}>{children}</div>
 }
 
+/** Página com título grande (estilo "Large Title" do iOS). */
 export function Pagina({ titulo, acao, children }: { titulo: string; acao?: ReactNode; children: ReactNode }) {
   return (
-    <div className="mx-auto w-full max-w-3xl px-4 pb-28 pt-4">
-      <div className="mb-4 flex items-center justify-between gap-3">
-        <h1 className="text-2xl font-bold text-slate-900">{titulo}</h1>
+    <div className="mx-auto w-full max-w-3xl px-4 pb-32 pt-3">
+      <div className="mb-4 flex items-end justify-between gap-3">
+        <h1 className="text-[34px] font-bold leading-tight tracking-[-0.03em] text-slate-900">{titulo}</h1>
         {acao}
       </div>
       {children}

@@ -48,7 +48,7 @@ export default function Pendencias() {
           : 'Seus pedidos e os do seu galpão. O motorista só fica inativo depois que a equipe aprovar.'}
       </p>
 
-      <div className="mb-3 grid grid-cols-2 rounded-xl border border-slate-300 bg-white p-1" role="tablist">
+      <div className="segmentado mb-3 grid grid-cols-2 rounded-[9px] p-0.5" role="tablist">
         {(
           [
             ['pendentes', `Pendentes${pendentes.data ? ` (${agruparPedidos(pendentes.data).length})` : ''}`],
@@ -61,7 +61,7 @@ export default function Pendencias() {
             role="tab"
             aria-selected={aba === valor}
             onClick={() => setAba(valor)}
-            className={`min-h-10 rounded-lg text-sm font-semibold ${aba === valor ? 'bg-sky-700 text-white' : 'text-slate-600'}`}
+            className="min-h-9 rounded-[7px] text-[13px] font-semibold text-slate-800 transition"
           >
             {rotulo}
           </button>
@@ -75,14 +75,14 @@ export default function Pendencias() {
           onChange={(e) => setBusca(e.target.value)}
           placeholder="Buscar por nome ou placa"
           aria-label="Buscar por nome ou placa"
-          className="min-h-12 min-w-0 flex-1 rounded-xl border border-slate-300 bg-white px-4 text-base focus:border-sky-600 focus:outline-none focus:ring-2 focus:ring-sky-200"
+          className="min-h-11 min-w-0 flex-1 rounded-[10px] border border-transparent bg-[rgb(118_118_128/0.12)] px-4 text-[17px] placeholder:text-slate-400 focus:border-sky-600 focus:outline-none focus:ring-2 focus:ring-sky-200"
         />
         {opcoesGalpao.length > 1 && (
           <select
             value={galpao}
             onChange={(e) => setGalpao(e.target.value)}
             aria-label="Filtrar por galpão"
-            className="min-h-12 rounded-xl border border-slate-300 bg-white px-2 text-sm font-medium"
+            className="min-h-12 rounded-xl border border-black/5 bg-white px-2 text-sm font-medium"
           >
             <option value="">Galpões</option>
             {opcoesGalpao.map((g) => (

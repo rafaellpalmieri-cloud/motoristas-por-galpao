@@ -109,7 +109,7 @@ export default function RelatorioMensal() {
             value={mes}
             max={mesAtual()}
             onChange={(e) => e.target.value && setMes(e.target.value)}
-            className="min-h-11 rounded-xl border border-slate-300 bg-white px-3 text-base"
+            className="min-h-11 rounded-xl border border-black/5 bg-white px-3 text-base"
           />
         </label>
         <Botao variante="secundario" disabled={!data} onClick={exportar}>

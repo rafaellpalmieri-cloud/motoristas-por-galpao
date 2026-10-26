@@ -1,7 +1,76 @@
 @import 'tailwindcss';
 
+/*
+ * Visual inspirado nos apps nativos do iOS: fonte do sistema, fundo cinza
+ * agrupado, cartões brancos, cores do sistema (azul, verde, vermelho, laranja)
+ * e cinzas neutros. As paletas do Tailwind usadas no app (sky, emerald, rose,
+ * amber, orange, violet, slate) são remapeadas aqui, então todas as telas
+ * seguem o mesmo padrão sem precisar trocar classe por classe.
+ */
 @theme {
-  --font-sans: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --font-sans: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', 'Segoe UI Variable', 'Segoe UI',
+    system-ui, Roboto, 'Helvetica Neue', Arial, sans-serif;
+
+  /* Azul do sistema (ações, links, item ativo) */
+  --color-sky-50: #eef5ff;
+  --color-sky-100: #dcebff;
+  --color-sky-200: #b8d7ff;
+  --color-sky-300: #8cbfff;
+  --color-sky-400: #4a9dff;
+  --color-sky-500: #1a85ff;
+  --color-sky-600: #007aff;
+  --color-sky-700: #007aff;
+  --color-sky-800: #0064d2;
+  --color-sky-900: #004da3;
+
+  /* Verde do sistema (ativo) */
+  --color-emerald-50: #ebf9ef;
+  --color-emerald-100: #d6f4de;
+  --color-emerald-300: #8fe0a6;
+  --color-emerald-500: #34c759;
+  --color-emerald-600: #2fb350;
+  --color-emerald-700: #248a3d;
+  --color-emerald-800: #1d6f31;
+
+  /* Vermelho do sistema (inativo, ações destrutivas) */
+  --color-rose-50: #fff0ef;
+  --color-rose-100: #ffe0de;
+  --color-rose-200: #ffc5c1;
+  --color-rose-300: #ff9c95;
+  --color-rose-400: #ff6961;
+  --color-rose-600: #ff3b30;
+  --color-rose-700: #d70015;
+  --color-rose-800: #b0000f;
+
+  /* Laranja / amarelo do sistema (atenção, pendências) */
+  --color-amber-50: #fff8eb;
+  --color-amber-100: #ffefcf;
+  --color-amber-200: #ffe0a3;
+  --color-amber-300: #ffcc66;
+  --color-amber-800: #a05a00;
+  --color-amber-900: #7a4400;
+  --color-orange-100: #ffebd6;
+  --color-orange-600: #ff9500;
+  --color-orange-800: #b35f00;
+
+  /* Roxo do sistema (selo "Planilha") */
+  --color-violet-100: #f1e6ff;
+  --color-violet-800: #8944ab;
+
+  /* Cinzas neutros (fundo agrupado, separadores, textos secundários) */
+  --color-slate-50: #f2f2f7;
+  --color-slate-100: #e5e5ea;
+  --color-slate-200: #e5e5ea;
+  --color-slate-300: #d1d1d6;
+  --color-slate-400: #8e8e93;
+  --color-slate-500: #6e6e73;
+  --color-slate-600: #3c3c43;
+  --color-slate-700: #2c2c2e;
+  --color-slate-800: #1c1c1e;
+  --color-slate-900: #000000;
+
+  --radius-xl: 0.75rem; /* 12px: botões e campos */
+  --radius-2xl: 0.875rem; /* 14px: cartões agrupados */
 }
 
 html {
@@ -11,4 +80,55 @@ html {
 
 body {
   @apply bg-slate-50 text-slate-900 antialiased;
+  font-feature-settings: 'kern';
+  letter-spacing: -0.01em;
+}
+
+/* Cartões no estilo iOS: sem sombra pesada, separação pelo fundo cinza. */
+.shadow-sm {
+  box-shadow: 0 0.5px 0 rgb(0 0 0 / 0.04);
+}
+
+/* Barras translúcidas (efeito vidro) */
+.vidro {
+  background-color: rgb(249 249 249 / 0.78);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+  backdrop-filter: saturate(180%) blur(20px);
+}
+
+/* Janela que sobe de baixo no celular */
+dialog.folha::backdrop {
+  background: rgb(0 0 0 / 0.35);
+}
+@media (max-width: 639px) {
+  dialog.folha[open] {
+    animation: subir 0.28s cubic-bezier(0.32, 0.72, 0, 1);
+  }
+}
+@keyframes subir {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+
+/* Interruptor de opções (controle segmentado) */
+.segmentado {
+  background-color: rgb(118 118 128 / 0.12);
+}
+.segmentado [aria-pressed='true'],
+.segmentado [aria-selected='true'] {
+  background-color: #fff;
+  color: #000;
+  box-shadow:
+    0 3px 8px rgb(0 0 0 / 0.12),
+    0 3px 1px rgb(0 0 0 / 0.04);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  dialog.folha[open] {
+    animation: none;
+  }
 }

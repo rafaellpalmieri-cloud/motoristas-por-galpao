@@ -97,7 +97,7 @@ export default function Alertas() {
           onChange={(e) => definir({ q: e.target.value })}
           placeholder="Buscar por nome ou placa"
           aria-label="Buscar por nome ou placa"
-          className="min-h-12 w-full rounded-xl border border-slate-300 bg-white px-4 text-base focus:border-sky-600 focus:outline-none focus:ring-2 focus:ring-sky-200"
+          className="min-h-11 w-full rounded-[10px] border border-transparent bg-[rgb(118_118_128/0.12)] px-4 text-[17px] placeholder:text-slate-400 focus:border-sky-600 focus:outline-none focus:ring-2 focus:ring-sky-200"
         />
 
         <div className="flex flex-wrap gap-2" role="group" aria-label="Período rápido">
@@ -107,7 +107,7 @@ export default function Alertas() {
               type="button"
               aria-pressed={atalhoAtivo === rotulo}
               onClick={() => definir({ de: dias === 29 ? '' : diaRelativo(dias), ate: '' })}
-              className={`min-h-10 rounded-full px-4 text-sm font-semibold ${atalhoAtivo === rotulo ? 'bg-sky-700 text-white' : 'border border-slate-300 text-slate-700'}`}
+              className={`min-h-10 rounded-full px-4 text-sm font-semibold ${atalhoAtivo === rotulo ? 'bg-sky-600 text-white' : 'bg-[rgb(118_118_128/0.12)] text-slate-800'}`}
             >
               {rotulo}
             </button>
@@ -122,7 +122,7 @@ export default function Alertas() {
               value={de}
               max={ate}
               onChange={(e) => e.target.value && definir({ de: e.target.value })}
-              className="min-h-11 rounded-xl border border-slate-300 bg-white px-3 text-base"
+              className="min-h-11 rounded-xl border border-black/5 bg-white px-3 text-base"
             />
           </label>
           <label className="flex flex-col gap-1 text-sm font-medium text-slate-700">
@@ -133,7 +133,7 @@ export default function Alertas() {
               min={de}
               max={hoje}
               onChange={(e) => e.target.value && definir({ ate: e.target.value === hoje ? '' : e.target.value })}
-              className="min-h-11 rounded-xl border border-slate-300 bg-white px-3 text-base"
+              className="min-h-11 rounded-xl border border-black/5 bg-white px-3 text-base"
             />
           </label>
         </div>
@@ -143,7 +143,7 @@ export default function Alertas() {
             value={galpao}
             onChange={(e) => definir({ galpao: e.target.value })}
             aria-label="Filtrar por galpão"
-            className="min-h-12 rounded-xl border border-slate-300 bg-white px-3 text-base font-medium"
+            className="min-h-12 rounded-xl border border-black/5 bg-white px-3 text-base font-medium"
           >
             <option value="">{ehAdmin ? 'Todos os galpões' : 'Meus galpões'}</option>
             {opcoesGalpao.map((g) => (

@@ -131,10 +131,10 @@ export default function Motoristas() {
           onChange={(e) => definir('q', e.target.value)}
           placeholder="Buscar por nome, placa ou CPF"
           aria-label="Buscar por nome, placa ou CPF"
-          className="min-h-12 w-full rounded-xl border border-slate-300 bg-white px-4 text-base focus:border-sky-600 focus:outline-none focus:ring-2 focus:ring-sky-200"
+          className="min-h-11 w-full rounded-[10px] border border-transparent bg-[rgb(118_118_128/0.12)] px-4 text-[17px] placeholder:text-slate-400 focus:border-sky-600 focus:outline-none focus:ring-2 focus:ring-sky-200"
         />
         <div className="flex gap-2">
-          <div role="group" aria-label="Filtrar por status" className="grid flex-1 grid-cols-3 rounded-xl border border-slate-300 bg-white p-1">
+          <div role="group" aria-label="Filtrar por status" className="segmentado grid flex-1 grid-cols-3 rounded-[9px] p-0.5">
             {(
               [
                 ['todos', 'Todos'],
@@ -147,7 +147,7 @@ export default function Motoristas() {
                 type="button"
                 aria-pressed={status === valor}
                 onClick={() => definir('status', valor === 'todos' ? '' : valor)}
-                className={`min-h-10 rounded-lg text-sm font-semibold ${status === valor ? 'bg-sky-700 text-white' : 'text-slate-600'}`}
+                className="min-h-9 rounded-[7px] text-[13px] font-semibold text-slate-800 transition"
               >
                 {rotulo}
               </button>
@@ -158,7 +158,7 @@ export default function Motoristas() {
               value={galpao}
               onChange={(e) => definir('galpao', e.target.value)}
               aria-label="Filtrar por galpão"
-              className="min-h-12 rounded-xl border border-slate-300 bg-white px-2 text-sm font-medium"
+              className="min-h-12 rounded-xl border border-black/5 bg-white px-2 text-sm font-medium"
             >
               <option value="">{ehAdmin ? 'Todos galpões' : 'Meus galpões'}</option>
               {opcoesGalpao.map((g) => (
@@ -174,7 +174,7 @@ export default function Motoristas() {
           value={rota}
           onChange={(e) => definir('rota', e.target.value)}
           aria-label="Filtrar por rotas"
-          className="min-h-11 rounded-xl border border-slate-300 bg-white px-3 text-sm font-medium"
+          className="min-h-11 rounded-xl border border-black/5 bg-white px-3 text-sm font-medium"
         >
           <option value="">Rotas: todos</option>
           <option value="nunca">Nunca fez rota</option>
