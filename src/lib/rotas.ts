@@ -25,3 +25,24 @@ export function parado(m: Pick<Motorista, 'realizou_rotas' | 'qtd_rotas' | 'ulti
   const dias = diasDesdeUltimaRota(m.ultima_rota)
   return !nuncaRodou(m) && dias !== null && dias >= DIAS_PARADO
 }
+
+/** A partir destes dias sem rota o motorista vai para os alertas, para cortar (igual a dias_corte_sem_rota() no banco). */
+export const DIAS_CORTE = 20
+
+/** Faixas do filtro "sem rota": valor do filtro, rótulo, mínimo e máximo de dias. */
+export const FAIXAS_SEM_ROTA = [
+  ['5', 'Sem rota há 5 a 9 dias', 5, 9],
+  ['10', 'Sem rota há 10 a 14 dias', 10, 14],
+  ['15', 'Sem rota há 15 a 19 dias', 15, 19],
+  ['20', `Sem rota há ${DIAS_CORTE}+ dias (cortar)`, DIAS_CORTE, Infinity],
+] as const
+
+/** Dias sem rota de quem já rodou; null se nunca rodou ou não há data. */
+export function diasSemRota(m: Pick<Motorista, 'realizou_rotas' | 'qtd_rotas' | 'ultima_rota'>): number | null {
+  return nuncaRodou(m) ? null : diasDesdeUltimaRota(m.ultima_rota)
+}
+
+export function paraCortar(m: Pick<Motorista, 'realizou_rotas' | 'qtd_rotas' | 'ultima_rota'>): boolean {
+  const dias = diasSemRota(m)
+  return dias !== null && dias >= DIAS_CORTE
+}

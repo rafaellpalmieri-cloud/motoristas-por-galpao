@@ -7,7 +7,12 @@
  * Funções para executar:
  *  - preencherCodigos   → UMA vez: cria/preenche a coluna "codigo" nas abas ATIVOS e INATIVOS
  *                          com o código que o motorista já tem no app (busca por placa/celular).
- *  - sincronizarTudo    → envia ATIVOS (novos e dados atualizados) e depois INATIVOS (inativações).
+ *  - gerarCodigosNovos  → dá código (M0001...) aos motoristas novos da aba ATIVOS que
+ *                          o app ainda não conhece. Também roda dentro do sincronizarTudo.
+ *  - sincronizarTudo    → gera códigos novos, envia ATIVOS (novos e dados atualizados)
+ *                          e depois INATIVOS (inativações).
+ *  - conferirAtivos     → só leitura: lista as linhas da aba ATIVOS que não estão
+ *                          ativas no site (inativas no app, código inexistente/repetido).
  *  - instalarGatilho    → UMA vez: agenda sincronizarTudo a cada 15 minutos e o
  *                          backup semanal (domingo de madrugada).
  *  - fazerBackup        → salva no seu Google Drive uma cópia (CSV) de motoristas,
@@ -28,6 +33,8 @@ const CONFIG = {
   URL_FUNCAO: 'https://idihrzbchxaptjgvsjfu.supabase.co/functions/v1/sincronizar-planilha',
   TAMANHO_LOTE: 200,
   PASTA_BACKUP: 'Backups - Motoristas por Galpão',
+  // Backup usado por compararComBackup e pela correção de códigos ('' = o mais recente).
+  BACKUP_REFERENCIA: '2026-10-18_1417',
   BACKUPS_MANTIDOS: 12,
   INTERVALO_MINUTOS: 15,
 };
@@ -184,8 +191,214 @@ function sincronizarInativos() {
   }
 }
 
+/**
+ * Se o filtro da aba não cobre a coluna "codigo", ordenar pelo filtro move as
+ * pessoas e deixa os códigos parados: cada código passa a apontar para outra
+ * pessoa. Nesse caso a sincronização para, em vez de espalhar dados trocados.
+ */
+function verificarFiltros_() {
+  [CONFIG.ABA_ATIVOS, CONFIG.ABA_INATIVOS].forEach(function (nomeAba) {
+    const aba = aba_(nomeAba);
+    const filtro = aba.getFilter();
+    const pos = posicoes_(aba);
+    if (!filtro || pos.codigo === undefined) return;
+    const faixa = filtro.getRange();
+    const coluna = pos.codigo + 1;
+    if (coluna < faixa.getColumn() || coluna > faixa.getLastColumn()) {
+      throw new Error('Aba "' + nomeAba + '": o filtro não inclui a coluna "codigo". Ordenar pelo filtro troca os códigos ' +
+        'de pessoa. Sincronização parada: rode corrigirFiltros e confira os códigos antes de sincronizar de novo.');
+    }
+  });
+}
+
+/**
+ * Refaz o filtro das abas ATIVOS e INATIVOS cobrindo todas as colunas, inclusive
+ * "codigo". Os critérios de filtro que estavam aplicados são removidos.
+ */
+function corrigirFiltros() {
+  [CONFIG.ABA_ATIVOS, CONFIG.ABA_INATIVOS].forEach(function (nomeAba) {
+    const aba = aba_(nomeAba);
+    const filtro = aba.getFilter();
+    if (!filtro) { console.log(nomeAba + ': sem filtro, nada a fazer.'); return; }
+    const linha = filtro.getRange().getRow();
+    filtro.remove();
+    aba.getRange(linha, 1, aba.getLastRow() - linha + 1, aba.getLastColumn()).createFilter();
+    console.log(nomeAba + ': filtro refeito cobrindo as colunas A até ' +
+      aba.getRange(1, aba.getLastColumn()).getA1Notation().replace(/\d+/, '') + '.');
+  });
+}
+
+/**
+ * Só leitura: compara os códigos da planilha com o último backup do Drive
+ * (CONFIG.BACKUP_REFERENCIA). Lista as linhas cujo código, no backup, era de
+ * outra pessoa (CPF ou nome diferente): sinal de código que mudou de linha.
+ */
+function compararComBackup() {
+  const backup = lerBackup_();
+  const doBackup = {};
+  backup.motoristas.forEach(function (m) { doBackup[m.codigo] = { nome: m.nome, cpf: m.cpf }; });
+
+  const soDigitos = cpfNormalizado_;
+  const trocados = [];
+  [CONFIG.ABA_ATIVOS, CONFIG.ABA_INATIVOS].forEach(function (nomeAba) {
+    const aba = aba_(nomeAba);
+    const pos = posicoes_(aba);
+    if (pos.codigo === undefined) return;
+    lerLinhas_(aba, pos, ['codigo', 'nome_completo', 'cpf']).forEach(function (l) {
+      const b = l.codigo && doBackup[l.codigo];
+      if (!b) return;
+      const cpfDiferente = soDigitos(b.cpf) && soDigitos(l.cpf) && soDigitos(b.cpf) !== soDigitos(l.cpf);
+      const nomeDiferente = normalizar_(b.nome) && normalizar_(l.nome_completo) && normalizar_(b.nome) !== normalizar_(l.nome_completo);
+      if (cpfDiferente || nomeDiferente) {
+        trocados.push(nomeAba + ' linha ' + l.linha + ': ' + l.codigo + ' está com ' + (l.nome_completo || '(sem nome)') +
+          ', mas no backup era de ' + (b.nome || '(sem nome)'));
+      }
+    });
+  });
+  console.log('COMPARAÇÃO COM O BACKUP ' + backup.nome + ': ' + trocados.length + ' código(s) com outra pessoa.' +
+    (trocados.length ? '\n  ' + trocados.slice(0, 200).join('\n  ') : ''));
+}
+
+function cpfNormalizado_(v) {
+  const d = String(v || '').replace(/\D/g, '');
+  return d ? d.padStart(11, '0') : '';
+}
+
+/**
+ * Lê o arquivo de motoristas de um backup do Drive: o de CONFIG.BACKUP_REFERENCIA
+ * (nome da subpasta, ex. "2026-10-18_1417") ou, se vazio, o mais recente.
+ */
+function lerBackup_() {
+  const pastas = DriveApp.getFoldersByName(CONFIG.PASTA_BACKUP);
+  if (!pastas.hasNext()) throw new Error('Pasta "' + CONFIG.PASTA_BACKUP + '" não encontrada no Drive.');
+  const subpastas = [];
+  const it = pastas.next().getFolders();
+  while (it.hasNext()) subpastas.push(it.next());
+  subpastas.sort(function (a, b) { return a.getName() < b.getName() ? 1 : -1; });
+  const escolhida = CONFIG.BACKUP_REFERENCIA
+    ? subpastas.filter(function (p) { return p.getName() === CONFIG.BACKUP_REFERENCIA; })[0]
+    : subpastas[0];
+  if (!escolhida) throw new Error('Backup "' + (CONFIG.BACKUP_REFERENCIA || 'mais recente') + '" não encontrado.');
+  const arquivos = escolhida.searchFiles('title contains "motoristas_"');
+  if (!arquivos.hasNext()) throw new Error('Backup ' + escolhida.getName() + ' sem o arquivo de motoristas.');
+  const tabela = Utilities.parseCsv(arquivos.next().getBlob().getDataAsString('UTF-8').replace(/^﻿/, ''), ';');
+  const cab = tabela[0];
+  const i = function (nome) { return cab.indexOf(nome); };
+  return {
+    nome: escolhida.getName(),
+    motoristas: tabela.slice(1).filter(function (r) { return String(r[i('codigo')] || '').trim(); }).map(function (r) {
+      return {
+        codigo: String(r[i('codigo')]).trim(),
+        nome: r[i('nome_completo')] || '',
+        cpf: r[i('cpf')] || '',
+        placa: r[i('placa')] || '',
+      };
+    }),
+  };
+}
+
+/** Desliga a sincronização automática (o backup semanal continua). Para religar: instalarGatilho. */
+function pausarSincronizacao() {
+  let n = 0;
+  ScriptApp.getProjectTriggers()
+    .filter(function (t) { return t.getHandlerFunction() === 'sincronizarTudo' || t.getHandlerFunction() === 'sincronizarInativos'; })
+    .forEach(function (t) { ScriptApp.deleteTrigger(t); n++; });
+  console.log('Sincronização automática pausada (' + n + ' gatilho(s) removido(s)). Para religar, rode instalarGatilho.');
+}
+
+/** Só mostra o que a correção faria; não altera nada. */
+function simularCorrecaoCodigos() { corrigirCodigos_(false); }
+
+/** Aplica a correção dos códigos (rode antes simularCorrecaoCodigos e confira o resultado). */
+function aplicarCorrecaoCodigos() { corrigirCodigos_(true); }
+
+/**
+ * Devolve a cada linha o código que a pessoa tinha no backup de referência,
+ * achando a pessoa pelo CPF (ou, sem CPF, pelo nome, se for único no backup).
+ * Linhas de quem não está no backup (cadastrados depois) não são mexidas.
+ * Gera a aba "CONFERÊNCIA CÓDIGOS" com cada mudança.
+ */
+function corrigirCodigos_(aplicar) {
+  const gatilhoAtivo = ScriptApp.getProjectTriggers().some(function (t) { return t.getHandlerFunction() === 'sincronizarTudo'; });
+  if (aplicar && gatilhoAtivo) throw new Error('Rode pausarSincronizacao antes de aplicar a correção.');
+
+  const backup = lerBackup_();
+  const porCpf = {}, porNome = {}, codigosBackup = {};
+  backup.motoristas.forEach(function (m) {
+    codigosBackup[m.codigo] = m;
+    const cpf = cpfNormalizado_(m.cpf);
+    if (cpf) (porCpf[cpf] = porCpf[cpf] || []).push(m.codigo);
+    const nome = normalizar_(m.nome);
+    if (nome) (porNome[nome] = porNome[nome] || []).push(m.codigo);
+  });
+
+  const relatorio = [['Aba', 'Linha', 'Nome', 'CPF termina em', 'Código atual', 'Código correto', 'Achado por', 'Situação']];
+  const resumo = { corrigidos: 0, ja_certos: 0, nao_estao_no_backup: 0, sem_como_decidir: 0, linha_mudou: 0 };
+  [CONFIG.ABA_ATIVOS, CONFIG.ABA_INATIVOS].forEach(function (nomeAba) {
+    const aba = aba_(nomeAba);
+    const pos = posicoes_(aba);
+    if (pos.codigo === undefined) return;
+    const linhas = lerLinhas_(aba, pos, ['codigo', 'nome_completo', 'cpf', 'placa'])
+      .filter(function (l) { return l.nome_completo || l.cpf; });
+    const usados = {};
+    linhas.forEach(function (l) {
+      const cpf = cpfNormalizado_(l.cpf);
+      let correto = null, como = '';
+      const mesmaPlaca = function (c) { return normalizar_(codigosBackup[c].placa) === normalizar_(l.placa); };
+      if (cpf && porCpf[cpf]) {
+        // Mesmo CPF com várias placas: escolhe pela placa; se não der, não decide.
+        const opcoes = porCpf[cpf];
+        const pelaPlaca = opcoes.filter(mesmaPlaca);
+        if (opcoes.length === 1) { correto = opcoes[0]; como = 'CPF'; }
+        else if (pelaPlaca.length === 1) { correto = pelaPlaca[0]; como = 'CPF + placa'; }
+      } else if (porNome[normalizar_(l.nome_completo)]) {
+        // Sem CPF no backup (ex.: inativos antes do complemento): pelo nome; nome repetido, pela placa.
+        const opcoes = porNome[normalizar_(l.nome_completo)].filter(function (c) { return !cpfNormalizado_(codigosBackup[c].cpf) || !cpf; });
+        const pelaPlaca = opcoes.filter(mesmaPlaca);
+        if (opcoes.length === 1) { correto = opcoes[0]; como = 'nome'; }
+        else if (pelaPlaca.length === 1) { correto = pelaPlaca[0]; como = 'nome + placa'; }
+      }
+      const cpfFim = cpf ? cpf.slice(-3) : '';
+      if (!correto) {
+        const noBackup = (cpf && porCpf[cpf]) || porNome[normalizar_(l.nome_completo)];
+        resumo[noBackup ? 'sem_como_decidir' : 'nao_estao_no_backup']++;
+        if (noBackup) relatorio.push([nomeAba, l.linha, l.nome_completo, cpfFim, l.codigo, '', '', 'decidir à mão']);
+        return;
+      }
+      if (usados[correto]) {
+        resumo.sem_como_decidir++;
+        relatorio.push([nomeAba, l.linha, l.nome_completo, cpfFim, l.codigo, correto, como, 'código repetido (linha ' + usados[correto] + '): decidir à mão']);
+        return;
+      }
+      usados[correto] = l.linha;
+      if (correto === l.codigo) { resumo.ja_certos++; return; }
+      let situacao = aplicar ? 'corrigido' : 'será corrigido';
+      if (aplicar) {
+        const nomeAgora = String(aba.getRange(l.linha, pos.nome_completo + 1).getValue()).trim();
+        if (nomeAgora !== String(l.nome_completo).trim()) { resumo.linha_mudou++; situacao = 'linha mudou: não alterado'; }
+        else { aba.getRange(l.linha, pos.codigo + 1).setNumberFormat('@').setValue(correto); resumo.corrigidos++; }
+      } else {
+        resumo.corrigidos++;
+      }
+      relatorio.push([nomeAba, l.linha, l.nome_completo, cpfFim, l.codigo, correto, como, situacao]);
+    });
+  });
+
+  const planilha = SpreadsheetApp.getActiveSpreadsheet();
+  const nomeRel = 'CONFERÊNCIA CÓDIGOS';
+  const rel = planilha.getSheetByName(nomeRel) || planilha.insertSheet(nomeRel);
+  rel.clearContents();
+  rel.getRange(1, 1, relatorio.length, relatorio[0].length).setNumberFormat('@').setValues(relatorio.map(function (r) {
+    return r.map(function (v) { return v === null || v === undefined ? '' : String(v); });
+  }));
+  console.log((aplicar ? 'CORREÇÃO APLICADA' : 'SIMULAÇÃO (nada foi alterado)') + ' com o backup ' + backup.nome + ': ' +
+    JSON.stringify(resumo) + '\n  Detalhes na aba "' + nomeRel + '".');
+}
+
 /** Executado pelo gatilho: primeiro ATIVOS (novos entram), depois INATIVOS. */
 function sincronizarTudo() {
+  verificarFiltros_();
+  gerarCodigosNovos();
   sincronizarAtivos();
   sincronizarInativos();
 }
@@ -196,6 +409,7 @@ function sincronizarTudo() {
  * Não apaga nem altera códigos já preenchidos.
  */
 function preencherCodigos() {
+  verificarFiltros_();
   [CONFIG.ABA_ATIVOS, CONFIG.ABA_INATIVOS].forEach(function (nomeAba) {
     const aba = aba_(nomeAba);
     let pos = posicoes_(aba);
@@ -223,11 +437,14 @@ function preencherCodigos() {
       sem_placa_e_celular: semCodigo.length - linhas.length,
     };
     const pendentes = [];
+    const nomes = {};
+    todas.forEach(function (l) { nomes[l.linha] = l.nome_completo; });
     enviar_('buscar_codigos', linhas).forEach(function (lote) {
       lote.forEach(function (r) {
-        if (r.situacao === 'ok') {
-          codigos[Number(r.linha) - 2][0] = r.codigo;
+        if (r.situacao === 'ok' && gravarCodigo_(aba, pos, Number(r.linha), nomes[r.linha], r.codigo)) {
           resumo.preenchidos++;
+        } else if (r.situacao === 'ok') {
+          if (pendentes.length < 80) pendentes.push(r.linha + ' (a linha mudou durante a execução; rode de novo)');
         } else {
           resumo[r.situacao === 'ambiguo' ? 'ambiguos' : 'nao_encontrados']++;
           if (pendentes.length < 80) pendentes.push(r.linha + (r.situacao === 'ambiguo' ? ' (placa repetida)' : ''));
@@ -235,11 +452,156 @@ function preencherCodigos() {
       });
     });
 
-    faixaCodigo.setNumberFormat('@'); // texto: não perde zeros à esquerda
-    faixaCodigo.setValues(codigos);
     console.log(nomeAba + ': ' + JSON.stringify(resumo) +
       (pendentes.length ? '\n  Preencha à mão as linhas: ' + pendentes.join(', ') : ''));
   });
+}
+
+/**
+ * Dá código novo (M0001, M0002...) aos motoristas NOVOS da aba ATIVOS: linhas sem
+ * código, com nome e placa/celular, que o app não encontra nem pela placa nem pelo
+ * celular. O número é o seguinte ao maior já usado na planilha (as duas abas) ou no app.
+ * Quem o app já conhece não recebe código novo (use preencherCodigos).
+ * Roda sozinho no sincronizarTudo; pode ser executado à mão também.
+ */
+function gerarCodigosNovos() {
+  const trava = LockService.getScriptLock();
+  trava.waitLock(30000);
+  try {
+    const aba = aba_(CONFIG.ABA_ATIVOS);
+    const pos = posicoes_(aba);
+    const total = aba.getLastRow() - 1;
+    if (pos.codigo === undefined || total < 1) return;
+
+    const codigos = aba.getRange(2, pos.codigo + 1, total, 1).getValues();
+    const candidatas = lerLinhas_(aba, pos, ['nome_completo', 'placa', 'celular'])
+      .filter(function (l) { return !String(codigos[l.linha - 2][0]).trim() && l.nome_completo; });
+    if (!candidatas.length) return;
+
+    const semContato = candidatas.filter(function (l) { return !l.placa && !l.celular; });
+    const nomes = {};
+    candidatas.forEach(function (l) { nomes[l.linha] = l.nome_completo; });
+    const novas = [];
+    const mudaram = [];
+    const conhecidas = [];
+    enviar_('buscar_codigos', candidatas
+      .filter(function (l) { return l.placa || l.celular; })
+      .map(function (l) { return { linha: l.linha, placa: l.placa, celular: l.celular }; }))
+      .forEach(function (lote) {
+        lote.forEach(function (r) { (r.situacao === 'nao_encontrado' ? novas : conhecidas).push(Number(r.linha)); });
+      });
+
+    if (novas.length) {
+      const formato = /^M(\d+)$/i;
+      let maior = 0;
+      let digitos = 4;
+      const considerar = function (c) {
+        const m = formato.exec(String(c || '').trim());
+        if (!m) return;
+        maior = Math.max(maior, Number(m[1]));
+        digitos = Math.max(digitos, m[1].length);
+      };
+      codigos.forEach(function (c) { considerar(c[0]); });
+      const inativos = aba_(CONFIG.ABA_INATIVOS);
+      const posInativos = posicoes_(inativos);
+      if (posInativos.codigo !== undefined && inativos.getLastRow() > 1) {
+        inativos.getRange(2, posInativos.codigo + 1, inativos.getLastRow() - 1, 1).getValues()
+          .forEach(function (c) { considerar(c[0]); });
+      }
+      codigosDoApp_().forEach(considerar);
+
+      // Célula por célula: só grava se a linha ainda for da mesma pessoa e o código continuar vazio.
+      novas.sort(function (a, b) { return a - b; }).forEach(function (linha) {
+        const codigo = 'M' + String(maior + 1).padStart(digitos, '0');
+        if (gravarCodigo_(aba, pos, linha, nomes[linha], codigo)) {
+          maior++;
+          codigos[linha - 2][0] = codigo;
+        } else {
+          mudaram.push(linha);
+        }
+      });
+    }
+    const gerados = novas.filter(function (l) { return mudaram.indexOf(l) < 0; });
+
+    console.log('CÓDIGOS NOVOS: ' + JSON.stringify({ gerados: gerados.length, ja_no_app: conhecidas.length, sem_placa_e_celular: semContato.length }) +
+      (gerados.length ? '\n  Gerados nas linhas: ' + gerados.map(function (l) { return l + ' → ' + codigos[l - 2][0]; }).join(', ') : '') +
+      (mudaram.length ? '\n  Linhas que mudaram durante a execução (ficam para a próxima): ' + mudaram.join(', ') : '') +
+      (conhecidas.length ? '\n  Já existem no app (rode preencherCodigos ou preencha à mão): ' + conhecidas.slice(0, 80).join(', ') : '') +
+      (semContato.length ? '\n  Sem placa e sem celular (preencha um dos dois): ' + semContato.slice(0, 80).map(function (l) { return l.linha; }).join(', ') : ''));
+  } finally {
+    trava.releaseLock();
+  }
+}
+
+/** Grava o código numa célula só se ela continuar vazia e a linha ainda for da mesma pessoa. */
+function gravarCodigo_(aba, pos, linha, nomeLido, codigo) {
+  const celula = aba.getRange(linha, pos.codigo + 1);
+  const nomeAgora = pos.nome_completo !== undefined ? String(aba.getRange(linha, pos.nome_completo + 1).getValue()).trim() : '';
+  if (String(celula.getValue()).trim() || nomeAgora !== String(nomeLido || '').trim()) return false;
+  celula.setNumberFormat('@').setValue(codigo); // texto: não perde zeros à esquerda
+  return true;
+}
+
+/**
+ * Só leitura: compara a aba ATIVOS com o app e lista as linhas que não aparecem
+ * como ativas no site (inativas no app, código inexistente, código repetido ou sem código).
+ */
+function conferirAtivos() {
+  const aba = aba_(CONFIG.ABA_ATIVOS);
+  const pos = posicoes_(aba);
+  if (pos.codigo === undefined) throw new Error('Aba ATIVOS sem coluna "codigo": rode preencherCodigos primeiro.');
+  const doApp = {};
+  motoristasDoApp_().forEach(function (m) { doApp[String(m.codigo).trim()] = m; });
+
+  const linhas = lerLinhas_(aba, pos, ['codigo', 'nome_completo', 'placa', 'galpao'])
+    .filter(function (l) { return l.codigo || l.nome_completo; });
+  const vistos = {};
+  const inativos = [];
+  const naoExistem = [];
+  const repetidos = [];
+  const semCodigo = [];
+  let ativos = 0;
+  linhas.forEach(function (l) {
+    const desc = 'linha ' + l.linha + ': ' + (l.codigo ? l.codigo + ' ' : '') + (l.nome_completo || '(sem nome)') +
+      (l.placa ? ' · ' + l.placa : '') + (l.galpao ? ' · ' + l.galpao : '');
+    if (!l.codigo) { semCodigo.push(desc); return; }
+    if (vistos[l.codigo]) { repetidos.push(desc + ' (mesmo código da linha ' + vistos[l.codigo] + ')'); return; }
+    vistos[l.codigo] = l.linha;
+    const m = doApp[l.codigo];
+    if (!m) naoExistem.push(desc);
+    else if (m.status !== 'ativo') {
+      inativos.push(desc + ' → no app: ' + m.status +
+        (m.inativo_desde ? ' desde ' + String(m.inativo_desde).slice(0, 10) : '') +
+        (m.motivo_inativacao ? ' (' + m.motivo_inativacao + ')' : ''));
+    } else ativos++;
+  });
+
+  const bloco = function (titulo, itens) { return itens.length ? '\n\n' + titulo + ' (' + itens.length + '):\n  ' + itens.join('\n  ') : ''; };
+  console.log('CONFERÊNCIA ATIVOS: ' + linhas.length + ' linhas na planilha, ' + ativos + ' ativas no app.' +
+    bloco('Inativos no app', inativos) +
+    bloco('Código não existe no app', naoExistem) +
+    bloco('Código repetido na planilha', repetidos) +
+    bloco('Sem código', semCodigo));
+}
+
+/** Todos os códigos que já existem no app. */
+function codigosDoApp_() {
+  return motoristasDoApp_().map(function (m) { return m.codigo; });
+}
+
+/** Motoristas do app (lidos pela mesma rota do backup). */
+function motoristasDoApp_() {
+  const resposta = UrlFetchApp.fetch(CONFIG.URL_FUNCAO, {
+    method: 'post',
+    contentType: 'application/json',
+    headers: { 'x-sync-token': token_() },
+    payload: JSON.stringify({ acao: 'backup' }),
+    muteHttpExceptions: true,
+  });
+  if (resposta.getResponseCode() !== 200) throw new Error('Falha ao ler os códigos do app (' + resposta.getResponseCode() + '): ' + resposta.getContentText());
+  const dados = JSON.parse(resposta.getContentText());
+  if (dados.erro) throw new Error('Falha ao ler os códigos do app: ' + dados.erro);
+  return dados.motoristas || [];
 }
 
 // ---------------------------------------------------------------------

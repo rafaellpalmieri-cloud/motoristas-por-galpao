@@ -7,8 +7,9 @@ import { Carregando, EstadoErro, EstadoVazio, Pagina } from '../components/ui'
 import { useCpfsCompletos, useMotoristas } from '../hooks/motoristas'
 import { usePendentes } from '../hooks/solicitacoes'
 import { GALPOES, SEM_GALPAO } from '../lib/constantes'
+import { baixarCsv } from '../lib/csv'
 import { mensagemErro } from '../lib/erros'
-import { DIAS_PARADO, formatarCpf, nuncaRodou, parado } from '../lib/rotas'
+import { DIAS_PARADO, diasSemRota, FAIXAS_SEM_ROTA, formatarCpf, nuncaRodou, parado } from '../lib/rotas'
 import type { Motorista } from '../lib/tipos'
 
 type FiltroStatus = 'todos' | 'ativo' | 'inativo'
@@ -32,6 +33,7 @@ export default function Motoristas() {
   const buscaAdiada = useDeferredValue(busca)
   const status = (params.get('status') as FiltroStatus) || 'todos'
   const rota = params.get('rota') ?? ''
+  const faixa = FAIXAS_SEM_ROTA.find(([valor]) => valor === rota)
   const galpao = params.get('galpao') ?? ''
 
   function definir(chave: string, valor: string) {
@@ -83,6 +85,10 @@ export default function Motoristas() {
       if (status !== 'todos' && m.status !== status) return false
       if (rota === 'nunca' && !nuncaRodou(m)) return false
       if (rota === 'parado' && !parado(m)) return false
+      if (faixa) {
+        const dias = diasSemRota(m)
+        if (dias === null || dias < faixa[2] || dias > faixa[3]) return false
+      }
       if (!termo) return true
       return (
         semAcento(m.nome_completo ?? '').includes(termo) ||
@@ -91,7 +97,7 @@ export default function Motoristas() {
           (cpfsCompletos?.get(m.id) ?? (m.cpf_mascarado ?? '').replace(/\D/g, '')).includes(termoCpf))
       )
     })
-  }, [doGalpao, buscaAdiada, status, rota, cpfsCompletos])
+  }, [doGalpao, buscaAdiada, status, rota, faixa, cpfsCompletos])
 
   // Mostra a pessoa inteira (todas as placas) se qualquer placa dela passou no filtro.
   const pessoas = useMemo(() => {
@@ -116,6 +122,31 @@ export default function Motoristas() {
     return null
   }
 
+  /** Exporta as placas que estão na tela (com os filtros aplicados). CPF como aparece para quem exporta. */
+  function exportarCsv() {
+    const hoje = new Date().toLocaleDateString('sv-SE', { timeZone: 'America/Sao_Paulo' })
+    const linhas = pessoas.flatMap((placas) => {
+      const cpf = cpfDaPessoa(placas) ?? ''
+      return placas.map((m) => ({
+        codigo: m.codigo,
+        nome: m.nome_completo ?? '',
+        cpf,
+        celular: m.celular ?? '',
+        placa: m.placa ?? '',
+        modal: m.modal ?? '',
+        galpao: m.galpao ?? '',
+        status: m.status,
+        inativo_desde: m.inativo_desde ?? '',
+        motivo_inativacao: m.motivo_inativacao ?? '',
+        fez_rota: m.realizou_rotas == null ? '' : m.realizou_rotas ? 'SIM' : 'NÃO',
+        qtd_rotas: m.qtd_rotas ?? '',
+        ultima_rota: m.ultima_rota ?? '',
+        dias_sem_rota: diasSemRota(m) ?? '',
+      }))
+    })
+    baixarCsv(`motoristas-${hoje}.csv`, linhas, Object.keys(linhas[0]))
+  }
+
   function ehNovo(m: Motorista) {
     return (
       m.status === 'inativo' && !!vistosEm && m.atualizado_em > vistosEm && m.atualizado_por !== session?.user.id
@@ -124,7 +155,7 @@ export default function Motoristas() {
 
   return (
     <Pagina titulo="Motoristas">
-      <div className="sticky top-[57px] z-10 -mx-4 mb-3 flex flex-col gap-2 bg-slate-50/95 px-4 pb-2 pt-1 backdrop-blur">
+      <div className="sticky top-16 z-10 -mx-4 mb-3 flex flex-col gap-2 bg-slate-50/95 px-4 pb-2 pt-1 backdrop-blur">
         <input
           type="search"
           value={busca}
@@ -178,13 +209,27 @@ export default function Motoristas() {
         >
           <option value="">Rotas: todos</option>
           <option value="nunca">Nunca fez rota</option>
-          <option value="parado">Sem rota há {DIAS_PARADO}+ dias</option>
+          {FAIXAS_SEM_ROTA.map(([valor, rotulo]) => (
+            <option key={valor} value={valor}>
+              {rotulo}
+            </option>
+          ))}
+          {/* Atalho do painel e do lembrete semanal. */}
+          {rota === 'parado' && <option value="parado">Sem rota há {DIAS_PARADO}+ dias</option>}
         </select>
         {data && (
-          <div className="flex gap-2 text-sm">
+          <div className="flex flex-wrap items-center gap-2 text-sm">
             <span className="rounded-full bg-emerald-100 px-3 py-1 font-semibold text-emerald-800">{contagem.ativos} motoristas ativos</span>
             <span className="rounded-full bg-rose-50 px-3 py-1 font-semibold text-rose-700">{contagem.inativos} inativos</span>
             <span className="px-1 py-1 text-slate-500">{doGalpao.length} placas</span>
+            <button
+              type="button"
+              onClick={exportarCsv}
+              disabled={!pessoas.length}
+              className="ml-auto inline-flex min-h-10 items-center gap-1 rounded-xl border border-slate-300 bg-white px-3 font-semibold text-slate-800 hover:bg-slate-50 disabled:opacity-50"
+            >
+              ⬇ Exportar CSV
+            </button>
           </div>
         )}
       </div>

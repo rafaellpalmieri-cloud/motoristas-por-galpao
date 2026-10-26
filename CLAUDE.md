@@ -28,7 +28,8 @@ Secrets já cadastrados no Supabase: `APP_ORIGIN`, `PLANILHA_SYNC_TOKEN`, `NOTIF
 
 ## Decisões de produto (não desfaça sem pedir)
 
-- **Inativação com aprovação**: dispatcher só **solicita** (`solicitar_inativacao_lote`); admin aprova ou recusa (`decidir_grupo_inativacao`) depois de enviar para a Coopmetro e inativar no sistema interno. Admin inativa direto. Reativar é direto para todos.
+- **Inativação e reativação com aprovação**: dispatcher só **solicita** (`solicitar_inativacao_lote` / `solicitar_reativacao_lote`); admin aprova ou recusa (`decidir_grupo_inativacao`, serve para os dois tipos, coluna `tipo`) depois de atualizar a Coopmetro e o sistema interno. Admin inativa e reativa direto. As duas pedem **motivo** (reativação: `validar_motivo_reativacao`), que fica no pedido e no histórico.
+- **Alertas**: cada alerta fica "não lido" até o botão "Marcar como lido" (tabela `alertas_lidos`; abrir a aba não marca nada). Tipos: inativação, ativo sem rota há 20+ dias (`dias_corte_sem_rota()`, "cortar") e pedido do próprio usuário aprovado/recusado. O sino usa `alertas_nao_lidos()`.
 - **Várias placas**: cada placa é um cadastro (`codigo`). `pessoa_id` agrupa a mesma pessoa (por CPF; sem CPF, pelo celular). Inativar escolhe quais placas.
 - **Planilha "RELAÇÃO INTERNA ATIVOS E INATIVOS"** (Google Sheets) → app via Apps Script (`docs/apps-script/sincronizar-planilha.gs`) e a Edge Function `sincronizar-planilha`. A aba ATIVOS cadastra novos e atualiza dados, **sem mudar status**. A aba INATIVOS inativa quem ainda está ativo, uma vez por linha, e completa CPF e rotas. O código manda; a placa é só reserva, com desempate por celular e nome, e se continuar empatado não mexe em ninguém.
 - **Avisos**: notificações push do site (Web Push/VAPID) pela função `notificar-movimentacao`. WhatsApp (Z-API) e a aba "MOVIMENTAÇÕES APP" estão no código, mas **desligados** (sem secrets).

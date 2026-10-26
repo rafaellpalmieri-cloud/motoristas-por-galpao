@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom'
 import { formatarData } from '../lib/datas'
-import { diasDesdeUltimaRota, nuncaRodou, parado } from '../lib/rotas'
+import { diasSemRota, nuncaRodou, paraCortar } from '../lib/rotas'
 import { formatarCelular, linkTelefone, linkWhatsApp } from '../lib/telefone'
 import type { Motorista, Solicitacao } from '../lib/tipos'
 import { IconeTelefone } from './Icones'
@@ -33,6 +33,7 @@ export function CardPessoa({
   const ativas = placas.filter((p) => p.status === 'ativo')
   const inativaveis = ativas.filter((p) => !pendentes.has(p.id))
   const inativas = placas.filter((p) => p.status === 'inativo')
+  const reativaveis = inativas.filter((p) => !pendentes.has(p.id))
   const algumaAtiva = ativas.length > 0
   const varias = placas.length > 1
 
@@ -90,8 +91,8 @@ export function CardPessoa({
           </a>
         )}
         <div className="ml-auto flex gap-2">
-          {inativas.length > 0 && (
-            <Botao variante="sucesso" onClick={() => aoAlterarStatus({ acao: 'reativar', motoristas: inativas })}>
+          {reativaveis.length > 0 && (
+            <Botao variante="sucesso" onClick={() => aoAlterarStatus({ acao: 'reativar', motoristas: reativaveis })}>
               Reativar
             </Botao>
           )}
@@ -136,9 +137,9 @@ function LinhaPlaca({
         </span>
         <span className="flex flex-wrap items-center gap-1">
           {compacta && <BadgeStatus status={placa.status} />}
-          {pendente && ativo && (
+          {pendente && (
             <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-bold uppercase text-amber-900">
-              Inativação solicitada
+              {pendente.tipo === 'reativacao' ? 'Reativação solicitada' : 'Inativação solicitada'}
             </span>
           )}
           {novo && <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-bold uppercase text-amber-800">Novo</span>}
@@ -165,12 +166,17 @@ function LinhaRotas({ motorista }: { motorista: Motorista }) {
     )
   }
   if (motorista.qtd_rotas == null && !motorista.ultima_rota) return null
-  const dias = diasDesdeUltimaRota(motorista.ultima_rota)
+  const dias = diasSemRota(motorista)
+  const cortar = motorista.status === 'ativo' && paraCortar(motorista)
+  const atencao = dias !== null && dias >= 5
   return (
-    <p className={`mt-1 text-sm ${parado(motorista) ? 'font-semibold text-amber-800' : 'text-slate-600'}`}>
+    <p className={`mt-1 text-sm ${cortar ? 'font-semibold text-rose-700' : atencao ? 'font-semibold text-amber-800' : 'text-slate-600'}`}>
       {motorista.qtd_rotas != null ? `${motorista.qtd_rotas} rota(s)` : 'Rotas'}
       {motorista.ultima_rota ? ` · última em ${formatarData(motorista.ultima_rota)}` : ''}
-      {dias !== null && parado(motorista) ? ` (parado há ${dias} dias)` : ''}
+      {atencao ? ` (sem rota há ${dias} dias)` : ''}
+      {cortar && (
+        <span className="ml-1 rounded-full bg-rose-100 px-2 py-0.5 text-xs font-bold uppercase text-rose-800">Cortar</span>
+      )}
     </p>
   )
 }

@@ -147,7 +147,7 @@ export default function RelatorioMensal() {
                 <p className="text-3xl font-bold text-slate-800">
                   {data.por_dispatcher.reduce((t, d) => t + d.pedidos, 0)}
                 </p>
-                <p className="text-sm text-slate-600">pedidos de inativação</p>
+                <p className="text-sm text-slate-600">pedidos de inativação/reativação</p>
               </div>
             </div>
           </Cartao>

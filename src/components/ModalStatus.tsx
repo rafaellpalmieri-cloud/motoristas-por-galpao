@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useAuth } from '../auth/AuthProvider'
 import { useAlterarStatus } from '../hooks/motoristas'
 import { useSolicitar } from '../hooks/solicitacoes'
-import { MOTIVOS_INATIVACAO } from '../lib/constantes'
+import { MOTIVOS_INATIVACAO, MOTIVOS_REATIVACAO } from '../lib/constantes'
 import { mensagemErro } from '../lib/erros'
 import type { Motorista } from '../lib/tipos'
 import { useToast } from './Toast'
@@ -16,11 +16,12 @@ export interface AlvoStatus {
 
 /**
  * Inativar (com motivo) ou reativar uma ou mais placas do mesmo motorista.
- * Dispatcher não inativa direto: envia um pedido que o admin aprova.
+ * Dispatcher não inativa nem reativa direto: envia um pedido que o admin aprova.
  */
 export function ModalStatus({ alvo, aoFechar }: { alvo: AlvoStatus | null; aoFechar: () => void }) {
   const { ehAdmin } = useAuth()
-  const titulo = alvo?.acao === 'reativar' ? 'Reativar' : ehAdmin ? 'Inativar' : 'Solicitar inativação'
+  const reativar = alvo?.acao === 'reativar'
+  const titulo = ehAdmin ? (reativar ? 'Reativar' : 'Inativar') : reativar ? 'Solicitar reativação' : 'Solicitar inativação'
   return (
     <Modal aberto={!!alvo} titulo={titulo} aoFechar={aoFechar}>
       {alvo && <Conteudo key={alvo.motoristas.map((m) => m.id).join()} alvo={alvo} aoFechar={aoFechar} />}
@@ -31,7 +32,7 @@ export function ModalStatus({ alvo, aoFechar }: { alvo: AlvoStatus | null; aoFec
 function Conteudo({ alvo, aoFechar }: { alvo: AlvoStatus; aoFechar: () => void }) {
   const { ehAdmin } = useAuth()
   const inativar = alvo.acao === 'inativar'
-  const solicitar = inativar && !ehAdmin
+  const solicitar = !ehAdmin
   const [marcados, setMarcados] = useState<string[]>(alvo.motoristas.map((m) => m.id))
   const [motivo, setMotivo] = useState('')
   const [observacao, setObservacao] = useState('')
@@ -48,16 +49,25 @@ function Conteudo({ alvo, aoFechar }: { alvo: AlvoStatus; aoFechar: () => void }
 
   function confirmar() {
     if (!escolhidos.length) return setErro('Escolha ao menos uma placa.')
-    if (inativar && !motivo) return setErro('Escolha o motivo.')
-    if (inativar && motivo === 'Outro' && !observacao.trim()) return setErro('Descreva o motivo na observação.')
+    if (!motivo) return setErro('Escolha o motivo.')
+    if (motivo === 'Outro' && !observacao.trim()) return setErro('Descreva o motivo na observação.')
     setErro(null)
     aoFechar()
     const obs = observacao.trim() || undefined
     if (solicitar) {
       pedir.mutate(
-        { motoristaIds: escolhidos.map((m) => m.id), motivo, observacao: obs },
         {
-          onSuccess: () => toast(`Pedido enviado (${nome}, ${resumo}). Continua ativo até a aprovação.`, 'sucesso'),
+          tipo: inativar ? 'inativacao' : 'reativacao',
+          motoristaIds: escolhidos.map((m) => m.id),
+          motivo,
+          observacao: obs,
+        },
+        {
+          onSuccess: () =>
+            toast(
+              `Pedido enviado (${nome}, ${resumo}). Continua ${inativar ? 'ativo' : 'inativo'} até a aprovação.`,
+              'sucesso',
+            ),
           onError: (e) => toast(`Não foi possível solicitar: ${mensagemErro(e)}`, 'erro'),
         },
       )
@@ -67,7 +77,7 @@ function Conteudo({ alvo, aoFechar }: { alvo: AlvoStatus; aoFechar: () => void }
       {
         motoristas: escolhidos,
         novoStatus: inativar ? 'inativo' : 'ativo',
-        motivo: inativar ? motivo : undefined,
+        motivo,
         observacao: obs,
       },
       {
@@ -116,15 +126,18 @@ function Conteudo({ alvo, aoFechar }: { alvo: AlvoStatus; aoFechar: () => void }
 
       {solicitar && (
         <p className="rounded-xl bg-amber-50 p-3 text-sm text-amber-900">
-          A equipe vai receber o pedido. As placas só ficam inativas depois que ela aprovar (envio para a Coopmetro e baixa
-          no sistema interno).
+          {inativar
+            ? 'A equipe vai receber o pedido. As placas só ficam inativas depois que ela aprovar (envio para a Coopmetro e baixa no sistema interno).'
+            : 'A equipe vai receber o pedido. As placas só voltam a ficar ativas depois que ela aprovar (Coopmetro e sistema interno).'}
         </p>
       )}
 
-      {inativar && (
+      {(
         <fieldset className="flex flex-col gap-2">
-          <legend className="mb-1 text-sm font-medium text-slate-700">Motivo *</legend>
-          {MOTIVOS_INATIVACAO.map((m) => (
+          <legend className="mb-1 text-sm font-medium text-slate-700">
+            Motivo da {inativar ? 'inativação' : 'reativação'} *
+          </legend>
+          {(inativar ? MOTIVOS_INATIVACAO : MOTIVOS_REATIVACAO).map((m) => (
             <label
               key={m}
               className={`flex min-h-11 cursor-pointer items-center gap-3 rounded-xl border px-3 ${motivo === m ? 'border-sky-600 bg-sky-50' : 'border-slate-300'}`}
@@ -145,7 +158,7 @@ function Conteudo({ alvo, aoFechar }: { alvo: AlvoStatus; aoFechar: () => void }
 
       <div className="flex flex-col gap-1">
         <label htmlFor="obs" className="text-sm font-medium text-slate-700">
-          Observação{inativar && motivo === 'Outro' ? ' *' : ' (opcional)'}
+          Observação{motivo === 'Outro' ? ' *' : ' (opcional)'}
         </label>
         <textarea
           id="obs"
@@ -154,7 +167,7 @@ function Conteudo({ alvo, aoFechar }: { alvo: AlvoStatus; aoFechar: () => void }
           value={observacao}
           onChange={(e) => setObservacao(e.target.value)}
           className="rounded-xl border border-slate-300 px-3 py-2 text-base focus:border-sky-600 focus:outline-none focus:ring-2 focus:ring-sky-200"
-          placeholder={inativar ? 'Ex.: vendeu o carro; continua rodando de moto' : 'Ex.: voltou a rodar'}
+          placeholder={inativar ? 'Ex.: vendeu o carro; continua rodando de moto' : 'Ex.: voltou a fazer rotas no SRJ2'}
         />
       </div>
 
@@ -165,7 +178,7 @@ function Conteudo({ alvo, aoFechar }: { alvo: AlvoStatus; aoFechar: () => void }
           Cancelar
         </Botao>
         <Botao variante={inativar ? 'perigo' : 'sucesso'} onClick={confirmar}>
-          {solicitar ? 'Solicitar' : inativar ? 'Inativar' : 'Reativar'}
+          {solicitar ? 'Enviar pedido' : inativar ? 'Inativar' : 'Reativar'}
         </Botao>
       </div>
     </div>

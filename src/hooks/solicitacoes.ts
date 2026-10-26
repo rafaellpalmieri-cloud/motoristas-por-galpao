@@ -50,6 +50,28 @@ export function useDecididas() {
   })
 }
 
+/** Pedidos do próprio usuário aprovados ou recusados nos últimos 30 dias (aparecem nos alertas). */
+export function useMeusPedidosDecididos(userId: string | undefined) {
+  return useQuery({
+    queryKey: ['solicitacoes', 'meus-decididos', userId],
+    enabled: !!userId,
+    refetchInterval: 60_000,
+    queryFn: async () => {
+      const desde = new Date(Date.now() - 30 * 24 * 3600 * 1000).toISOString()
+      const { data, error } = await supabase
+        .from('solicitacoes_inativacao')
+        .select(CAMPOS)
+        .eq('solicitado_por', userId!)
+        .in('status', ['aprovada', 'recusada'])
+        .gte('decidido_em', desde)
+        .order('decidido_em', { ascending: false })
+        .limit(300)
+      if (error) throw error
+      return data as Solicitacao[]
+    },
+  })
+}
+
 export function useSolicitacoesDoMotorista(motoristaId: string | undefined) {
   return useQuery({
     queryKey: ['solicitacoes', 'motorista', motoristaId],
@@ -67,16 +89,23 @@ export function useSolicitacoesDoMotorista(motoristaId: string | undefined) {
   })
 }
 
-/** Pede a inativação de uma ou mais placas (um pedido agrupado). */
+/** Pede a inativação ou a reativação de uma ou mais placas (um pedido agrupado). */
 export function useSolicitar() {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: async (v: { motoristaIds: string[]; motivo: string; observacao?: string }) => {
-      const { error } = await supabase.rpc('solicitar_inativacao_lote', {
-        p_motorista_ids: v.motoristaIds,
-        p_motivo: v.motivo,
-        p_observacao: v.observacao ?? null,
-      })
+    mutationFn: async (v: { tipo: Solicitacao['tipo']; motoristaIds: string[]; motivo?: string; observacao?: string }) => {
+      const { error } =
+        v.tipo === 'reativacao'
+          ? await supabase.rpc('solicitar_reativacao_lote', {
+              p_motorista_ids: v.motoristaIds,
+              p_motivo: v.motivo ?? null,
+              p_observacao: v.observacao ?? null,
+            })
+          : await supabase.rpc('solicitar_inativacao_lote', {
+              p_motorista_ids: v.motoristaIds,
+              p_motivo: v.motivo ?? null,
+              p_observacao: v.observacao ?? null,
+            })
       if (error) throw error
     },
     onSettled: () => invalidarTudo(queryClient),

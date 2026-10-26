@@ -233,8 +233,10 @@ function FormNovo({ aoCriar }: { aoCriar: (email: string, senha: string) => void
   )
 }
 
-function FormEditar({ usuario, aoFechar }: { usuario: Usuario; aoFechar: () => void }) {
-  const ehDispatcher = !usuario.papeis.includes('admin')
+function FormEditar({ usuario, souEu, aoFechar }: { usuario: Usuario; souEu: boolean; aoFechar: () => void }) {
+  const papelAtual: Papel = usuario.papeis.includes('admin') ? 'admin' : 'dispatcher'
+  const [papel, setPapel] = useState<Papel>(papelAtual)
+  const ehDispatcher = papel === 'dispatcher'
   const [telefone, setTelefone] = useState(usuario.telefone ?? '')
   const [galpoes, setGalpoes] = useState(usuario.galpoes)
   const [erro, setErro] = useState<string | null>(null)
@@ -247,23 +249,16 @@ function FormEditar({ usuario, aoFechar }: { usuario: Usuario; aoFechar: () => v
         const { error } = await supabase.from('perfis').update({ telefone: novoTelefone }).eq('user_id', usuario.user_id)
         if (error) throw error
       }
-      if (!ehDispatcher) return
-      const remover = usuario.galpoes.filter((g) => !galpoes.includes(g))
-      const adicionar = galpoes.filter((g) => !usuario.galpoes.includes(g))
-      if (adicionar.length) {
-        const { error } = await supabase
-          .from('dispatcher_galpoes')
-          .insert(adicionar.map((galpao) => ({ user_id: usuario.user_id, galpao })))
-        if (error) throw error
-      }
-      if (remover.length) {
-        const { error } = await supabase
-          .from('dispatcher_galpoes')
-          .delete()
-          .eq('user_id', usuario.user_id)
-          .in('galpao', remover)
-        if (error) throw error
-      }
+      const galpoesMudaram =
+        ehDispatcher && (galpoes.length !== usuario.galpoes.length || galpoes.some((g) => !usuario.galpoes.includes(g)))
+      if (papel === papelAtual && !galpoesMudaram) return
+      // Função e galpões mudam juntos, numa transação só.
+      const { error } = await supabase.rpc('mudar_papel_usuario', {
+        p_user: usuario.user_id,
+        p_papel: papel,
+        p_galpoes: ehDispatcher ? galpoes : null,
+      })
+      if (error) throw error
     },
     onSuccess: () => {
       toast('Dados atualizados.', 'sucesso')
@@ -283,6 +278,7 @@ function FormEditar({ usuario, aoFechar }: { usuario: Usuario; aoFechar: () => v
 
   return (
     <div className="flex flex-col gap-4">
+      {!souEu && <SeletorPapel valor={papel} aoMudar={setPapel} />}
       <Campo
         rotulo={ehDispatcher ? 'Telefone (WhatsApp) *' : 'Telefone (WhatsApp)'}
         type="tel"
@@ -291,7 +287,15 @@ function FormEditar({ usuario, aoFechar }: { usuario: Usuario; aoFechar: () => v
         value={telefone}
         onChange={(e) => setTelefone(e.target.value)}
       />
-      {ehDispatcher && <SeletorGalpoes valor={galpoes} aoMudar={setGalpoes} />}
+      {ehDispatcher ? (
+        <SeletorGalpoes valor={galpoes} aoMudar={setGalpoes} />
+      ) : (
+        papelAtual === 'dispatcher' && (
+          <p className="rounded-xl bg-sky-50 p-3 text-sm text-sky-900">
+            Como admin, passa a ver todos os galpões e a gerenciar a equipe.
+          </p>
+        )
+      )}
       {erro && <p className="text-sm text-rose-700">{erro}</p>}
       <div className="grid grid-cols-2 gap-3">
         <Botao variante="secundario" onClick={aoFechar}>
@@ -305,7 +309,7 @@ function FormEditar({ usuario, aoFechar }: { usuario: Usuario; aoFechar: () => v
   )
 }
 
-type Acao = { tipo: 'desativar' | 'reativar' | 'redefinir_senha'; usuario: Usuario }
+type Acao = { tipo: 'desativar' | 'reativar' | 'redefinir_senha' | 'excluir'; usuario: Usuario }
 
 function ConfirmarAcao({
   acao,
@@ -324,7 +328,12 @@ function ConfirmarAcao({
     onSuccess: (r) => {
       if (r.senha_temporaria) aoSenha(acao.usuario.email, r.senha_temporaria)
       else {
-        toast(acao.tipo === 'desativar' ? 'Usuário desativado.' : 'Usuário reativado.', 'sucesso')
+        toast(
+          { desativar: 'Usuário desativado.', reativar: 'Usuário reativado.', excluir: 'Usuário excluído da equipe.', redefinir_senha: '' }[
+            acao.tipo
+          ],
+          'sucesso',
+        )
         aoFechar()
       }
     },
@@ -335,7 +344,12 @@ function ConfirmarAcao({
     desativar: ['Desativar', 'não conseguirá mais entrar no app.'],
     reativar: ['Reativar', 'voltará a ter acesso ao app.'],
     redefinir_senha: ['Gerar nova senha', 'receberá uma nova senha temporária e terá de trocá-la no próximo acesso.'],
+    excluir: [
+      'Excluir',
+      'será excluído da equipe e perderá o acesso. O histórico de movimentações continua com o nome. Não dá para desfazer.',
+    ],
   }[acao.tipo]
+  const perigoso = acao.tipo === 'desativar' || acao.tipo === 'excluir'
 
   return (
     <div className="flex flex-col gap-4">
@@ -347,7 +361,7 @@ function ConfirmarAcao({
           Cancelar
         </Botao>
         <Botao
-          variante={acao.tipo === 'desativar' ? 'perigo' : 'primario'}
+          variante={perigoso ? 'perigo' : 'primario'}
           carregando={executar.isPending}
           onClick={() => executar.mutate()}
         >
@@ -434,6 +448,9 @@ export default function Dispatchers() {
                         Reativar
                       </Botao>
                     )}
+                    <Botao variante="secundario" className="text-rose-700" onClick={() => setAcao({ tipo: 'excluir', usuario: u })}>
+                      Excluir
+                    </Botao>
                     </>
                   )}
                 </div>
@@ -447,7 +464,14 @@ export default function Dispatchers() {
         <FormNovo aoCriar={mostrarSenha} />
       </Modal>
       <Modal aberto={!!editando} titulo={`Editar ${editando?.nome ?? ''}`} aoFechar={() => setEditando(null)}>
-        {editando && <FormEditar key={editando.user_id} usuario={editando} aoFechar={() => setEditando(null)} />}
+        {editando && (
+          <FormEditar
+            key={editando.user_id}
+            usuario={editando}
+            souEu={editando.user_id === session?.user.id}
+            aoFechar={() => setEditando(null)}
+          />
+        )}
       </Modal>
       <Modal aberto={!!acao} titulo="Confirmar" aoFechar={() => setAcao(null)}>
         {acao && <ConfirmarAcao acao={acao} aoFechar={() => setAcao(null)} aoSenha={mostrarSenha} />}

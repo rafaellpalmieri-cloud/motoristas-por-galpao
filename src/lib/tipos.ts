@@ -43,6 +43,7 @@ export interface Solicitacao {
   id: number
   motorista_id: string
   galpao: string | null
+  tipo: 'inativacao' | 'reativacao'
   motivo: string
   observacao: string | null
   status: StatusSolicitacao
