@@ -32,3 +32,6 @@ supabase/.env.zapi
 supabase/.notificar_token
 supabase/.vapid_private
 deno.lock
+
+# Backups do banco (dados reais, nunca versionar)
+backups/
