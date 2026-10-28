@@ -21,6 +21,9 @@ export interface Motorista {
   realizou_rotas: boolean | null
   qtd_rotas: number | null
   ultima_rota: string | null
+  /** Último status visto no CRM (ativo, inativo, pausado...). */
+  crm_status: string | null
+  id_coopmetro: string | null
 }
 
 export interface Historico {

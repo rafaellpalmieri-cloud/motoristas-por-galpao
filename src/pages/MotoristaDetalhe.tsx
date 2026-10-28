@@ -2,6 +2,7 @@ import { useState, type ReactNode } from 'react'
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { IconeTelefone } from '../components/Icones'
 import { ModalStatus, type AlvoStatus } from '../components/ModalStatus'
+import { ehPausado } from '../lib/pausados'
 import { BadgeStatus, Botao, Carregando, Cartao, EstadoErro, EstadoVazio, Pagina, SeloPlanilha } from '../components/ui'
 import { CartaoSolicitacao } from '../components/CartaoSolicitacao'
 import { useAuth } from '../auth/AuthProvider'
@@ -70,7 +71,7 @@ export default function MotoristaDetalhe() {
       <Cartao className="mb-4">
         <div className="mb-2 flex items-start justify-between gap-3">
           <h2 className="text-xl font-bold text-slate-900">{m.nome_completo || '(sem nome)'}</h2>
-          <BadgeStatus status={m.status} />
+          <BadgeStatus status={m.status} pausado={ehPausado(m)} />
         </div>
         <dl className="text-sm">
           <Linha rotulo="Código">{m.codigo}</Linha>
@@ -120,7 +121,7 @@ export default function MotoristaDetalhe() {
                     <strong>{p.placa ?? 'sem placa'}</strong>
                     {[p.modal, p.galpao, p.codigo].filter(Boolean).map((t) => ` · ${t}`).join('')}
                   </span>
-                  <BadgeStatus status={p.status} />
+                  <BadgeStatus status={p.status} pausado={ehPausado(p)} />
                 </Link>
               </li>
             ))}

@@ -5,6 +5,7 @@ import { formatarCelular, linkTelefone, linkWhatsApp } from '../lib/telefone'
 import type { Motorista, Solicitacao } from '../lib/tipos'
 import { IconeTelefone } from './Icones'
 import type { AlvoStatus } from './ModalStatus'
+import { ehPausado } from '../lib/pausados'
 import { BadgeStatus, Botao } from './ui'
 
 /**
@@ -52,7 +53,7 @@ export function CardPessoa({
               .join(' · ')}
           </p>
         </Link>
-        {!varias && <BadgeStatus status={principal.status} />}
+        {!varias && <BadgeStatus status={principal.status} pausado={ehPausado(principal)} />}
       </div>
 
       <ul className={`mt-2 flex flex-col ${varias ? 'divide-y divide-slate-100 rounded-xl border border-slate-200' : ''}`}>
@@ -136,7 +137,7 @@ function LinhaPlaca({
             .join('')}
         </span>
         <span className="flex flex-wrap items-center gap-1">
-          {compacta && <BadgeStatus status={placa.status} />}
+          {compacta && <BadgeStatus status={placa.status} pausado={ehPausado(placa)} />}
           {pendente && (
             <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-bold uppercase text-amber-900">
               {pendente.tipo === 'reativacao' ? 'Reativação solicitada' : 'Inativação solicitada'}

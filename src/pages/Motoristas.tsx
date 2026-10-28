@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom'
 import { useAuth } from '../auth/AuthProvider'
 import { CardPessoa } from '../components/CardPessoa'
 import { ModalStatus, type AlvoStatus } from '../components/ModalStatus'
+import { ehPausado, jaOperou } from '../lib/pausados'
 import { Carregando, EstadoErro, EstadoVazio, Pagina } from '../components/ui'
 import { useCpfsCompletos, useMotoristas } from '../hooks/motoristas'
 import { usePendentes } from '../hooks/solicitacoes'
@@ -12,7 +13,7 @@ import { mensagemErro } from '../lib/erros'
 import { DIAS_PARADO, diasSemRota, FAIXAS_SEM_ROTA, formatarCpf, nuncaRodou, parado } from '../lib/rotas'
 import type { Motorista } from '../lib/tipos'
 
-type FiltroStatus = 'todos' | 'ativo' | 'inativo'
+type FiltroStatus = 'todos' | 'ativo' | 'inativo' | 'pausado'
 const POR_PAGINA = 60
 
 function semAcento(texto: string) {
@@ -32,6 +33,8 @@ export default function Motoristas() {
   const busca = params.get('q') ?? ''
   const buscaAdiada = useDeferredValue(busca)
   const status = (params.get('status') as FiltroStatus) || 'todos'
+  // Dentro de Pausados: quem já operou (padrão) ou quem nunca operou.
+  const nuncaOperou = params.get('pausados') === 'nunca'
   const rota = params.get('rota') ?? ''
   const faixa = FAIXAS_SEM_ROTA.find(([valor]) => valor === rota)
   const galpao = params.get('galpao') ?? ''
@@ -69,12 +72,24 @@ export default function Motoristas() {
     return mapa
   }, [doGalpao])
 
-  // Motorista ativo = tem ao menos uma placa ativa.
+  // Motorista ativo = tem ao menos uma placa ativa; pausado = todas as placas pausadas no CRM.
   const contagem = useMemo(() => {
     let ativos = 0
-    for (const placas of porPessoa.values()) if (placas.some((p) => p.status === 'ativo')) ativos++
-    return { ativos, inativos: porPessoa.size - ativos }
-  }, [porPessoa])
+    let pausados = 0
+    for (const placas of porPessoa.values()) {
+      if (placas.some((p) => p.status === 'ativo')) ativos++
+      else if (placas.every(ehPausado)) pausados++
+    }
+    const placasPausadas = doGalpao.filter(ehPausado)
+    const operaram = placasPausadas.filter(jaOperou).length
+    return {
+      ativos,
+      pausados,
+      inativos: porPessoa.size - ativos - pausados,
+      operaram,
+      nuncaOperaram: placasPausadas.length - operaram,
+    }
+  }, [porPessoa, doGalpao])
 
   const filtrados = useMemo(() => {
     const termo = semAcento(buscaAdiada.trim())
@@ -82,7 +97,13 @@ export default function Motoristas() {
     // Busca por CPF só quando o termo é numérico (com ou sem pontos/traço).
     const termoCpf = /^[\d.\-\s]{4,}$/.test(termo) ? termo.replace(/\D/g, '') : ''
     return doGalpao.filter((m) => {
-      if (status !== 'todos' && m.status !== status) return false
+      // Pausados do CRM ficam só na aba deles.
+      if (status === 'pausado') {
+        if (!ehPausado(m) || jaOperou(m) === nuncaOperou) return false
+      } else {
+        if (ehPausado(m)) return false
+        if (status !== 'todos' && m.status !== status) return false
+      }
       if (rota === 'nunca' && !nuncaRodou(m)) return false
       if (rota === 'parado' && !parado(m)) return false
       if (faixa) {
@@ -97,7 +118,7 @@ export default function Motoristas() {
           (cpfsCompletos?.get(m.id) ?? (m.cpf_mascarado ?? '').replace(/\D/g, '')).includes(termoCpf))
       )
     })
-  }, [doGalpao, buscaAdiada, status, rota, faixa, cpfsCompletos])
+  }, [doGalpao, buscaAdiada, status, nuncaOperou, rota, faixa, cpfsCompletos])
 
   // Mostra a pessoa inteira (todas as placas) se qualquer placa dela passou no filtro.
   const pessoas = useMemo(() => {
@@ -135,7 +156,7 @@ export default function Motoristas() {
         placa: m.placa ?? '',
         modal: m.modal ?? '',
         galpao: m.galpao ?? '',
-        status: m.status,
+        status: ehPausado(m) ? 'pausado' : m.status,
         inativo_desde: m.inativo_desde ?? '',
         motivo_inativacao: m.motivo_inativacao ?? '',
         fez_rota: m.realizou_rotas == null ? '' : m.realizou_rotas ? 'SIM' : 'NÃO',
@@ -165,19 +186,31 @@ export default function Motoristas() {
           className="min-h-11 w-full rounded-[10px] border border-transparent bg-[rgb(118_118_128/0.12)] px-4 text-[17px] placeholder:text-slate-400 focus:border-sky-600 focus:outline-none focus:ring-2 focus:ring-sky-200"
         />
         <div className="flex gap-2">
-          <div role="group" aria-label="Filtrar por status" className="segmentado grid flex-1 grid-cols-3 rounded-[9px] p-0.5">
+          <div role="group" aria-label="Filtrar por status" className="segmentado grid flex-1 grid-cols-4 rounded-[9px] p-0.5">
             {(
               [
                 ['todos', 'Todos'],
                 ['ativo', 'Ativos'],
                 ['inativo', 'Inativos'],
+                ['pausado', 'Pausados'],
               ] as const
             ).map(([valor, rotulo]) => (
               <button
                 key={valor}
                 type="button"
                 aria-pressed={status === valor}
-                onClick={() => definir('status', valor === 'todos' ? '' : valor)}
+                onClick={() => {
+                  setLimite(POR_PAGINA)
+                  setParams(
+                    (p) => {
+                      if (valor === 'todos') p.delete('status')
+                      else p.set('status', valor)
+                      if (valor !== 'pausado') p.delete('pausados')
+                      return p
+                    },
+                    { replace: true },
+                  )
+                }}
                 className="min-h-9 rounded-[7px] text-[13px] font-semibold text-slate-800 transition"
               >
                 {rotulo}
@@ -201,6 +234,31 @@ export default function Motoristas() {
             </select>
           )}
         </div>
+        {status === 'pausado' && (
+          <div role="group" aria-label="Pausados" className="segmentado grid grid-cols-2 rounded-[9px] p-0.5">
+            {(
+              [
+                ['', `Já operaram (${contagem.operaram})`],
+                ['nunca', `Nunca operaram (${contagem.nuncaOperaram})`],
+              ] as const
+            ).map(([valor, rotulo]) => (
+              <button
+                key={valor || 'operaram'}
+                type="button"
+                aria-pressed={nuncaOperou === (valor === 'nunca')}
+                onClick={() => definir('pausados', valor)}
+                className="min-h-9 rounded-[7px] text-[13px] font-semibold text-slate-800 transition"
+              >
+                {rotulo}
+              </button>
+            ))}
+          </div>
+        )}
+        {status === 'pausado' && (
+          <p className="px-1 text-[13px] text-slate-500">
+            Pausados no CRM. "Já operaram" = têm ID Coopmetro ou já fizeram rota.
+          </p>
+        )}
         <select
           value={rota}
           onChange={(e) => definir('rota', e.target.value)}
@@ -221,6 +279,7 @@ export default function Motoristas() {
           <div className="flex flex-wrap items-center gap-2 text-sm">
             <span className="rounded-full bg-emerald-100 px-3 py-1 font-semibold text-emerald-800">{contagem.ativos} motoristas ativos</span>
             <span className="rounded-full bg-rose-50 px-3 py-1 font-semibold text-rose-700">{contagem.inativos} inativos</span>
+            <span className="rounded-full bg-amber-50 px-3 py-1 font-semibold text-amber-800">{contagem.pausados} pausados</span>
             <span className="px-1 py-1 text-slate-500">{doGalpao.length} placas</span>
             <button
               type="button"

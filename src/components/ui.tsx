@@ -101,7 +101,14 @@ export function EstadoErro({ mensagem, aoTentarDeNovo }: { mensagem: string; aoT
   )
 }
 
-export function BadgeStatus({ status }: { status: Status }) {
+export function BadgeStatus({ status, pausado = false }: { status: Status; pausado?: boolean }) {
+  if (pausado && status === 'inativo')
+    return (
+      <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-50 px-2.5 py-0.5 text-[13px] font-semibold text-amber-800">
+        <span className="h-1.5 w-1.5 rounded-full bg-amber-500" aria-hidden />
+        Pausado
+      </span>
+    )
   return status === 'ativo' ? (
     <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-0.5 text-[13px] font-semibold text-emerald-700">
       <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" aria-hidden />
