@@ -6,6 +6,8 @@
 //  { solicitacao_id, status } → pedido de inativação ou reativação:
 //      • "pendente": push para os admins ativos;
 //      • "aprovada"/"recusada": push para quem pediu.
+//  { treinamento_id, evento } → "novo": push para os dispatchers do galpão;
+//                               "faltou": push para os admins ativos.
 //  { tarefa } → tarefas agendadas (pg_cron):
 //      • "lembrete_semanal": resumo para cada dispatcher (parados 30+ dias, nunca rodou);
 //      • "pedidos_parados": avisa os admins de pedidos sem resposta há mais de 24 h.
@@ -108,8 +110,54 @@ Deno.serve(async (req) => {
   if (corpo?.tarefa === 'pedidos_parados') return json(await pedidosParados(admin))
   if (corpo?.solicitacao_id) return await tratarPedido(admin, Number(corpo.solicitacao_id), String(corpo.status ?? ''))
   if (corpo?.historico_id) return await tratarMovimento(admin, Number(corpo.historico_id))
+  if (corpo?.treinamento_id) return await tratarTreinamento(admin, Number(corpo.treinamento_id), String(corpo.evento ?? ''))
   return json({ erro: 'Corpo inválido.' }, 400)
 })
+
+// ---------------------------------------------------------------------
+// Treinamento: "novo" → dispatchers do galpão; "faltou" → admins.
+// ---------------------------------------------------------------------
+async function tratarTreinamento(admin: SupabaseClient, id: number, evento: string): Promise<Response> {
+  if (!Number.isInteger(id) || id <= 0 || !['novo', 'faltou'].includes(evento)) {
+    return json({ erro: 'Treinamento inválido.' }, 400)
+  }
+  const { data: t } = await admin
+    .from('treinamentos')
+    .select('id, galpao, nome, inicio, status, presenca, presenca_por_nome, presenca_obs')
+    .eq('id', id)
+    .maybeSingle()
+  if (!t) return json({ erro: 'Treinamento não encontrado.' }, 404)
+
+  const nome = (t.nome as string | null) ?? 'Motorista'
+  let usuarios: string[]
+  let aviso: Aviso
+  if (evento === 'novo') {
+    if (t.status !== 'agendado') return json({ ok: true, pulado: 'cancelado' })
+    usuarios = (await dispatchersDoGalpao(admin, t.galpao as string, null)).map((d) => d.user_id)
+    aviso = {
+      title: `🎓 Novo treinamento · ${t.galpao}`,
+      body: `${nome}\n${dataHora(t.inicio as string)}`,
+      url: '/treinamentos',
+      tag: `trein-${t.id}`,
+    }
+  } else {
+    if (t.presenca !== 'faltou') return json({ ok: true, pulado: 'presença mudou' })
+    usuarios = await adminsAtivos(admin)
+    aviso = {
+      title: `❌ Faltou ao treinamento · ${t.galpao}`,
+      body: [
+        `${nome} · ${dataHora(t.inicio as string)}`,
+        t.presenca_obs ? `“${t.presenca_obs}”` : null,
+        t.presenca_por_nome ? `Por ${t.presenca_por_nome}` : null,
+      ]
+        .filter(Boolean)
+        .join('\n'),
+      url: '/treinamentos',
+      tag: `falta-${t.id}`,
+    }
+  }
+  return json({ ok: true, push: await enviarPush(admin, usuarios, aviso) })
+}
 
 // ---------------------------------------------------------------------
 // Inativação / reativação

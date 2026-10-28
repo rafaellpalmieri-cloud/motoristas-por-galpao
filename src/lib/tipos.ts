@@ -68,3 +68,19 @@ export interface Perfil {
   alertas_vistos_em: string
   ultimo_acesso?: string | null
 }
+
+export type Presenca = 'compareceu' | 'faltou'
+
+export interface Treinamento {
+  id: number
+  galpao: string
+  nome: string | null
+  telefone: string | null
+  inicio: string
+  status: 'agendado' | 'cancelado'
+  presenca: Presenca | null
+  presenca_obs: string | null
+  presenca_por_nome: string | null
+  presenca_em: string | null
+  criado_em: string
+}

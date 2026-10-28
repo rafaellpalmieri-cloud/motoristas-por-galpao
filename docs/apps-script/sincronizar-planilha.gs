@@ -11,6 +11,7 @@
  * Funções para executar:
  *  - sincronizarTudo     → envia a BASE - SUPABASE (com as rotas) ao app: cadastra,
  *                           atualiza dados e segue as mudanças de status do CRM.
+ *                           Depois envia os treinamentos das agendas dos galpões.
  *  - instalarGatilho     → UMA vez: agenda sincronizarTudo a cada 15 minutos e o
  *                           backup semanal (domingo de madrugada).
  *  - pausarSincronizacao → desliga a sincronização automática.
@@ -192,9 +193,88 @@ function sincronizarBase() {
     (exemplosErro.length ? '\n  ' + exemplosErro.join('\n  ') : ''));
 }
 
-/** Executado pelo gatilho. */
+// ---------------------------------------------------------------------
+// Treinamentos: agendas dos galpões (Google Agenda) → app.
+// Os IDs das agendas ficam na propriedade do script AGENDAS_TREINAMENTO,
+// em JSON: {"SRJ1":"...@group.calendar.google.com", "SRJ2":"...", ...}.
+// Só vão eventos cujo título começa com TREINAMENTO; descrição com TESTE é ignorada.
+// Da descrição sai só o telefone do motorista.
+// ---------------------------------------------------------------------
+const TREINAMENTO_DIAS_ANTES = 7;
+const TREINAMENTO_DIAS_DEPOIS = 60;
+
+function agendas_() {
+  const bruto = PropertiesService.getScriptProperties().getProperty('AGENDAS_TREINAMENTO');
+  if (!bruto) return null;
+  try {
+    return JSON.parse(bruto);
+  } catch (e) {
+    throw new Error('A propriedade AGENDAS_TREINAMENTO não é um JSON válido.');
+  }
+}
+
+/** Primeiro telefone da descrição (10 ou 11 dígitos, com ou sem 55). */
+function telefoneDaDescricao_(texto) {
+  const achado = String(texto || '').replace(/<[^>]*>/g, ' ').match(/(\+?55[\s.-]*)?\(?\d{2}\)?[\s.-]*9?\d{4}[\s.-]*\d{4}/);
+  if (!achado) return '';
+  const d = achado[0].replace(/\D/g, '');
+  return d.length > 11 && d.indexOf('55') === 0 ? d.slice(2) : d;
+}
+
+function sincronizarTreinamentos() {
+  const agendas = agendas_();
+  if (!agendas) {
+    console.log('Treinamentos: defina a propriedade AGENDAS_TREINAMENTO para ligar. Pulando.');
+    return;
+  }
+  const agora = new Date();
+  const de = new Date(agora.getTime() - TREINAMENTO_DIAS_ANTES * 864e5);
+  const ate = new Date(agora.getTime() + TREINAMENTO_DIAS_DEPOIS * 864e5);
+  const eventos = [];
+  Object.keys(agendas).forEach(function (galpao) {
+    const agenda = CalendarApp.getCalendarById(agendas[galpao]);
+    if (!agenda) throw new Error('Agenda do ' + galpao + ' não encontrada (confira o ID e o compartilhamento).');
+    agenda.getEvents(de, ate).forEach(function (ev) {
+      const titulo = String(ev.getTitle() || '').trim();
+      if (!/^TREINAMENTO\b/i.test(titulo)) return;
+      const descricao = ev.getDescription() || '';
+      if (/TESTE/i.test(descricao)) return;
+      const nome = titulo.replace(/^TREINAMENTO\s*/i, '').replace(new RegExp('\\s*' + galpao + '\\s*$', 'i'), '').trim();
+      eventos.push({
+        evento_id: ev.getId(),
+        galpao: galpao,
+        nome: nome,
+        telefone: telefoneDaDescricao_(descricao),
+        inicio: ev.getStartTime().toISOString(),
+      });
+    });
+  });
+
+  const resposta = UrlFetchApp.fetch(CONFIG.URL_FUNCAO, {
+    method: 'post',
+    contentType: 'application/json',
+    headers: { 'x-sync-token': token_() },
+    payload: JSON.stringify({ acao: 'treinamentos', eventos: eventos, de: de.toISOString(), ate: ate.toISOString() }),
+    muteHttpExceptions: true,
+  });
+  if (resposta.getResponseCode() !== 200) {
+    throw new Error('Falha ao enviar treinamentos (' + resposta.getResponseCode() + '): ' + resposta.getContentText());
+  }
+  console.log('Treinamentos: ' + eventos.length + ' na agenda → ' + resposta.getContentText());
+}
+
+/** Executado pelo gatilho. Uma parte com erro não impede a outra. */
 function sincronizarTudo() {
-  sincronizarBase();
+  const falhas = [];
+  [sincronizarBase, sincronizarTreinamentos].forEach(function (passo) {
+    try {
+      passo();
+    } catch (e) {
+      console.error(passo.name + ': ' + e);
+      falhas.push(passo.name + ': ' + e);
+    }
+  });
+  if (falhas.length) throw new Error(falhas.join('\n'));
 }
 
 /** Desliga a sincronização automática (o backup semanal continua). Para religar: instalarGatilho. */

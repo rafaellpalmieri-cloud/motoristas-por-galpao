@@ -15,6 +15,7 @@ import {
   useMotoristas,
 } from '../hooks/motoristas'
 import { agruparPedidos, useMeusPedidosDecididos } from '../hooks/solicitacoes'
+import { useAgora, useTreinamentos } from '../hooks/treinamentos'
 import { GALPOES, SEM_GALPAO } from '../lib/constantes'
 import { baixarCsv } from '../lib/csv'
 import { formatarData, formatarDataHora, tempoRelativo } from '../lib/datas'
@@ -40,7 +41,7 @@ const ATALHOS = [
   ['90 dias', 89],
 ] as const
 
-type Aba = 'inativacoes' | 'cortar' | 'pedidos'
+type Aba = 'inativacoes' | 'cortar' | 'pedidos' | 'treinos'
 
 
 /**
@@ -79,6 +80,7 @@ export default function Alertas() {
   const inativacoes = useAlertas({ de, ate, galpao })
   const motoristas = useMotoristas()
   const pedidos = useMeusPedidosDecididos(session?.user.id)
+  const treinamentos = useTreinamentos()
   const lidos = useAlertasLidos()
   const marcar = useMarcarAlertasLidos()
   const marcarVistos = useMarcarAlertasVistos()
@@ -123,10 +125,24 @@ export default function Alertas() {
     naoLido: !lido(chaveAlerta.pedido(itens[0])),
   }))
 
+  // ----- Treinamentos: dispatcher vê os novos por vir; admin vê as faltas dos últimos 30 dias -----
+  const agora = useAgora()
+  const itensTreino = (treinamentos.data ?? [])
+    .filter((t) =>
+      ehAdmin
+        ? t.presenca === 'faltou' && !!t.presenca_em && t.presenca_em.slice(0, 10) >= inicioNaoLidos
+        : t.status === 'agendado' && new Date(t.inicio).getTime() > agora,
+    )
+    .map((t) => {
+      const chave = ehAdmin ? chaveAlerta.falta(t.id) : chaveAlerta.treinamento(t.id)
+      return { t, chave, naoLido: !lido(chave) }
+    })
+
   const naoLidos = {
     inativacoes: itensInativacao.filter((i) => i.naoLido).length,
     cortar: itensCorte.filter((i) => i.naoLido).length,
     pedidos: itensPedido.filter((i) => i.naoLido).length,
+    treinos: itensTreino.filter((i) => i.naoLido).length,
   }
 
   const inativacoesVisiveis = itensInativacao.filter(
@@ -137,7 +153,10 @@ export default function Alertas() {
     (i) => (!soNaoLidos || i.naoLido) && bate(i.itens[0].motoristas?.nome_completo, i.itens[0].motoristas?.placa, i.itens[0].galpao),
   )
 
-  const visiveis = aba === 'inativacoes' ? inativacoesVisiveis : aba === 'cortar' ? corteVisiveis : pedidosVisiveis
+  const treinosVisiveis = itensTreino.filter((i) => (!soNaoLidos || i.naoLido) && bate(i.t.nome, null, i.t.galpao))
+
+  const visiveis =
+    aba === 'inativacoes' ? inativacoesVisiveis : aba === 'cortar' ? corteVisiveis : aba === 'treinos' ? treinosVisiveis : pedidosVisiveis
   const chavesNaoLidasVisiveis = visiveis.filter((i) => i.naoLido).map((i) => i.chave)
 
   /** Exporta os alertas da aba atual, com os filtros aplicados. */
@@ -169,6 +188,16 @@ export default function Alertas() {
               qtd_rotas: m.qtd_rotas ?? '',
               lido: lido(naoLido),
             }))
+          : aba === 'treinos'
+            ? treinosVisiveis.map(({ t, naoLido }) => ({
+                data: formatarDataHora(t.inicio),
+                nome: t.nome ?? '',
+                galpao: t.galpao,
+                telefone: t.telefone ?? '',
+                presenca: t.presenca === 'faltou' ? 'Faltou' : t.presenca === 'compareceu' ? 'Compareceu' : '',
+                observacao: t.presenca_obs ?? '',
+                lido: lido(naoLido),
+              }))
           : pedidosVisiveis.flatMap(({ itens, naoLido }) =>
               itens.map((s) => ({
                 tipo: s.tipo === 'reativacao' ? 'Reativação' : 'Inativação',
@@ -186,7 +215,7 @@ export default function Alertas() {
               })),
             )
     if (!linhas.length) return
-    const nome = { inativacoes: 'inativacoes', cortar: 'para-cortar', pedidos: 'meus-pedidos' }[aba]
+    const nome = { inativacoes: 'inativacoes', cortar: 'para-cortar', pedidos: 'meus-pedidos', treinos: 'treinamentos' }[aba]
     baixarCsv(`alertas-${nome}-${hoje}.csv`, linhas, Object.keys(linhas[0]))
   }
 
@@ -194,7 +223,8 @@ export default function Alertas() {
     marcar.mutate(chaves, { onError: (e) => toast(`Não foi possível marcar: ${mensagemErro(e)}`, 'erro') })
   }
 
-  const consulta = aba === 'inativacoes' ? inativacoes : aba === 'cortar' ? motoristas : pedidos
+  const consulta =
+    aba === 'inativacoes' ? inativacoes : aba === 'cortar' ? motoristas : aba === 'treinos' ? treinamentos : pedidos
   const atalhoAtivo = ATALHOS.find(([, dias]) => de === diaRelativo(dias) && ate === hoje)?.[0]
   const temFiltro = !!busca || !!galpao || soNaoLidos || (aba === 'inativacoes' && atalhoAtivo !== '30 dias')
 
@@ -202,12 +232,13 @@ export default function Alertas() {
     <Pagina titulo="Alertas">
       <CartaoNotificacoes />
 
-      <div className="mb-3 grid grid-cols-3 rounded-xl border border-slate-300 bg-white p-1" role="tablist">
+      <div className="mb-3 grid grid-cols-4 rounded-xl border border-slate-300 bg-white p-1" role="tablist">
         {(
           [
             ['inativacoes', 'Inativações', naoLidos.inativacoes],
             ['cortar', `Cortar (${DIAS_CORTE}+ dias)`, naoLidos.cortar],
             ['pedidos', 'Meus pedidos', naoLidos.pedidos],
+            ['treinos', ehAdmin ? 'Faltas' : 'Treinos', naoLidos.treinos],
           ] as const
         ).map(([valor, rotulo, qtd]) => (
           <button
@@ -233,7 +264,11 @@ export default function Alertas() {
           ? 'Motoristas inativados no app ou na planilha interna.'
           : aba === 'cortar'
             ? `Motoristas ativos sem rota há ${DIAS_CORTE} dias ou mais: avalie o corte.`
-            : 'Seus pedidos de inativação e reativação que já foram aprovados ou recusados.'}
+            : aba === 'treinos'
+              ? ehAdmin
+                ? 'Motoristas que faltaram ao treinamento: remarque com eles.'
+                : 'Treinamentos marcados nos seus galpões.'
+              : 'Seus pedidos de inativação e reativação que já foram aprovados ou recusados.'}
       </p>
 
       <div className="mb-4 flex flex-col gap-2 rounded-2xl border border-slate-200 bg-white p-3">
@@ -408,6 +443,20 @@ export default function Alertas() {
                         Última rota em {formatarData(m.ultima_rota)}
                         {m.qtd_rotas != null ? ` · ${m.qtd_rotas} rota(s) no total` : ''}
                       </p>
+                    </Link>
+                  </ItemAlerta>
+                ))}
+
+              {aba === 'treinos' &&
+                treinosVisiveis.map(({ t, chave, naoLido }) => (
+                  <ItemAlerta key={chave} naoLido={naoLido} aoMarcar={() => marcarComoLido([chave])}>
+                    <Link to="/treinamentos" className="block">
+                      <p className="font-semibold text-slate-900">{t.nome ?? 'Motorista'}</p>
+                      <p className={`mt-1 ${t.presenca === 'faltou' ? 'font-semibold text-rose-700' : 'text-sky-700'}`}>
+                        {t.presenca === 'faltou' ? 'Faltou ao treinamento' : 'Treinamento'} · {t.galpao} · {formatarDataHora(t.inicio)}
+                      </p>
+                      {t.presenca_obs && <p className="mt-1 text-sm text-slate-600">“{t.presenca_obs}”</p>}
+                      {t.presenca_por_nome && <p className="mt-2 text-sm text-slate-500">Por {t.presenca_por_nome}</p>}
                     </Link>
                   </ItemAlerta>
                 ))}

@@ -146,6 +146,8 @@ export const chaveAlerta = {
   inativacao: (historicoId: number) => `mov:${historicoId}`,
   corte: (m: Pick<Motorista, 'id' | 'ultima_rota'>) => `rota:${m.id}:${(m.ultima_rota ?? '').slice(0, 10)}`,
   pedido: (s: { id: number; grupo: string | null }) => `pedido:${s.grupo ?? s.id}`,
+  treinamento: (id: number) => `trein:${id}`,
+  falta: (id: number) => `falta:${id}`,
 }
 
 /** Chaves dos alertas que o usuário já marcou como lidos. */

@@ -34,6 +34,22 @@ O token da sincronização fica no arquivo `supabase/.planilha_sync_token`, que 
 4. **Sincronizar:** escolha **`sincronizarTudo`** e clique em **Executar**. O registro mostra `BASE - SUPABASE: {...}` com novos, atualizados, inativados, reativados, ignorados e erros.
 5. **Automático:** escolha **`instalarGatilho`** e clique em **Executar**. Isso troca o gatilho antigo pelo novo, que roda `sincronizarTudo` a cada 15 minutos. Para conferir: ⏰ **Acionadores**.
 
+## Treinamentos (agendas dos galpões)
+
+O mesmo script lê as agendas do Google Agenda de cada galpão a cada 15 minutos e manda ao app os eventos cujo título começa com **TREINAMENTO** (o formato que o `/marcar-treinamento` cria: `TREINAMENTO NOME DO MOTORISTA SRJx`). O telefone do motorista sai da descrição do evento. Descrição com **TESTE** é ignorada.
+
+- Janela: de 7 dias atrás até 60 dias à frente.
+- Remarcou na agenda: o app atualiza. Apagou o evento: o app marca como cancelado.
+- Os dispatchers veem os treinamentos dos galpões deles na aba **Treinos** e, depois do horário, marcam **Compareceu** ou **Faltou**.
+
+**Ligar (uma vez):** em ⚙️ **Configurações do projeto → Propriedades do script**, adicione a propriedade `AGENDAS_TREINAMENTO` com um JSON assim (um ID de agenda por galpão, os mesmos da skill `/marcar-treinamento`):
+
+```json
+{"SRJ1":"ID_DA_AGENDA@group.calendar.google.com","SRJ2":"...","SRJ8":"...","SRJ9":"...","SRJ10":"...","SRJ13":"..."}
+```
+
+Depois rode `sincronizarTudo` uma vez. O Google vai pedir permissão para o script ler o **Google Agenda**: aceite. Sem essa propriedade, a parte de treinamentos é pulada.
+
 ## Backup semanal no Google Drive
 
 O mesmo script faz uma cópia de segurança toda semana, aos domingos às 3h. O agendamento é criado pelo `instalarGatilho`.

@@ -4,7 +4,7 @@ import { useContagemAlertas } from '../hooks/motoristas'
 import { agruparPedidos, usePendentes } from '../hooks/solicitacoes'
 import { FaixaNotificacoes } from './AtivarNotificacoes'
 import { BotaoTema } from './BotaoTema'
-import { IconeDocumento, IconeEquipe, IconeGrafico, IconeMotoristas, IconeSair, IconeSino } from './Icones'
+import { IconeCapelo, IconeDocumento, IconeEquipe, IconeGrafico, IconeMotoristas, IconeSair, IconeSino } from './Icones'
 
 type Icone = (p: { cheio?: boolean; className?: string }) => React.ReactNode
 
@@ -99,6 +99,7 @@ export function Layout() {
             rotulo={ehAdmin ? 'Pendências' : 'Pedidos'}
             selo={pendentes ? agruparPedidos(pendentes).length : undefined}
           />
+          <ItemNav para="/treinamentos" Icone={IconeCapelo} rotulo="Treinos" />
           {ehAdmin && <ItemNav para="/admin" Icone={IconeGrafico} rotulo="Painel" />}
           {ehAdmin && <ItemNav para="/admin/dispatchers" Icone={IconeEquipe} rotulo="Equipe" />}
         </div>

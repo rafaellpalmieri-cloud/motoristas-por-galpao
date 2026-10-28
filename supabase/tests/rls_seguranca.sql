@@ -1658,6 +1658,109 @@ end;
 $$;
 reset role;
 
+-- Treinamentos: agenda → app só pela Edge Function; dispatcher vê só o galpão dele e marca presença depois do horário.
+set local role service_role;
+do $$
+declare r jsonb;
+begin
+  r := public.sincronizar_treinamentos(jsonb_build_array(
+    jsonb_build_object('evento_id', 'ev-futuro-srj1', 'galpao', 'SRJ1', 'nome', 'Treino Ficticio Um', 'telefone', '21 90000-0201',
+                       'inicio', now() + interval '2 days'),
+    jsonb_build_object('evento_id', 'ev-passado-srj1', 'galpao', 'SRJ1', 'nome', 'Treino Ficticio Dois', 'telefone', '21900000202',
+                       'inicio', now() - interval '2 hours'),
+    jsonb_build_object('evento_id', 'ev-srj2', 'galpao', 'SRJ2', 'nome', 'Treino Ficticio Tres', 'inicio', now() + interval '1 day'),
+    jsonb_build_object('evento_id', 'ev-ruim', 'galpao', 'XYZ', 'inicio', now())
+  ), now() - interval '7 days', now() + interval '60 days');
+  if (r ->> 'novos')::int <> 3 or jsonb_array_length(r -> 'erros') <> 1 then
+    raise exception 'FALHOU: sincronização de treinamentos: %', r;
+  end if;
+  -- Evento apagado da agenda vira cancelado.
+  r := public.sincronizar_treinamentos(jsonb_build_array(
+    jsonb_build_object('evento_id', 'ev-futuro-srj1', 'galpao', 'SRJ1', 'nome', 'Treino Ficticio Um', 'inicio', now() + interval '3 days'),
+    jsonb_build_object('evento_id', 'ev-passado-srj1', 'galpao', 'SRJ1', 'nome', 'Treino Ficticio Dois', 'telefone', '21900000202',
+                       'inicio', (select inicio from public.treinamentos where evento_id = 'ev-passado-srj1'))
+  ), now() - interval '7 days', now() + interval '60 days');
+  if (r ->> 'cancelados')::int <> 1 or (r ->> 'atualizados')::int <> 1
+     or (select status from public.treinamentos where evento_id = 'ev-srj2') <> 'cancelado' then
+    raise exception 'FALHOU: remarcação/cancelamento de treinamento: %', r;
+  end if;
+  raise notice 'OK: agenda cadastra, remarca e cancela treinamentos';
+end;
+$$;
+reset role;
+
+select set_config('request.jwt.claims', '{"sub":"00000000-0000-4000-a000-000000000002","role":"authenticated"}', true);
+set local role authenticated;
+do $$
+declare n integer; v_id bigint;
+begin
+  begin
+    perform public.sincronizar_treinamentos('[]'::jsonb, now(), now() + interval '1 day');
+    raise exception 'FALHOU: dispatcher sincronizou a agenda';
+  exception when insufficient_privilege then null;
+  end;
+  begin
+    insert into public.treinamentos (evento_id, galpao, inicio) values ('ev-x', 'SRJ1', now());
+    raise exception 'FALHOU: dispatcher gravou treinamento direto';
+  exception when insufficient_privilege then null;
+  end;
+  select count(*) into n from public.treinamentos;
+  if n <> 2 or exists (select 1 from public.treinamentos where galpao <> 'SRJ1') then
+    raise exception 'FALHOU: dispatcher SRJ1 viu treinamento de outro galpão';
+  end if;
+  raise notice 'OK: dispatcher só vê os treinamentos do galpão dele e não grava direto';
+
+  select id into v_id from public.treinamentos where evento_id = 'ev-futuro-srj1';
+  begin
+    perform public.marcar_presenca_treinamento(v_id, 'compareceu', null);
+    raise exception 'FALHOU: presença marcada antes do horário';
+  exception when invalid_parameter_value then null;
+  end;
+  select id into v_id from public.treinamentos where evento_id = 'ev-passado-srj1';
+  perform public.marcar_presenca_treinamento(v_id, 'faltou', 'Não apareceu');
+  begin
+    perform public.marcar_presenca_treinamento(v_id, 'compareceu', null);
+    raise exception 'FALHOU: dispatcher trocou presença já marcada';
+  exception when insufficient_privilege then null;
+  end;
+  if (select presenca from public.treinamentos where id = v_id) <> 'faltou' then
+    raise exception 'FALHOU: presença não gravada';
+  end if;
+  raise notice 'OK: presença só depois do horário e uma vez pelo dispatcher';
+end;
+$$;
+reset role;
+
+select set_config('request.jwt.claims', '{"sub":"00000000-0000-4000-a000-000000000003","role":"authenticated"}', true);
+set local role authenticated;
+do $$
+begin
+  perform public.marcar_presenca_treinamento(
+    (select id from public.treinamentos where evento_id = 'ev-passado-srj1'), 'compareceu', null);
+  raise exception 'FALHOU: dispatcher SRJ2 marcou presença no SRJ1';
+exception when insufficient_privilege then raise notice 'OK: dispatcher não marca presença em outro galpão';
+end;
+$$;
+reset role;
+
+select set_config('request.jwt.claims', '{"sub":"00000000-0000-4000-a000-000000000001","role":"authenticated"}', true);
+set local role authenticated;
+do $$
+declare n integer; v_id bigint;
+begin
+  select id into v_id from (select t.id from public.treinamentos t where t.evento_id = 'ev-passado-srj1') x;
+  n := public.alertas_nao_lidos();
+  perform public.marcar_alertas_lidos(array['falta:' || v_id]);
+  if public.alertas_nao_lidos() <> n - 1 then raise exception 'FALHOU: falta não virou alerta do admin'; end if;
+  perform public.marcar_presenca_treinamento(v_id, 'compareceu', 'Chegou atrasado');
+  if (select presenca from public.treinamentos where id = v_id) <> 'compareceu' then
+    raise exception 'FALHOU: admin não corrigiu a presença';
+  end if;
+  raise notice 'OK: falta vira alerta do admin e o admin corrige a presença';
+end;
+$$;
+reset role;
+
 do $$ begin raise notice '=== TODOS OS TESTES PASSARAM ==='; end $$;
 
 rollback;

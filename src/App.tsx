@@ -11,6 +11,7 @@ import MotoristaDetalhe from './pages/MotoristaDetalhe'
 import Pendencias from './pages/Pendencias'
 import Motoristas from './pages/Motoristas'
 import RedefinirSenha from './pages/RedefinirSenha'
+import Treinamentos from './pages/Treinamentos'
 import TrocarSenha from './pages/TrocarSenha'
 
 // Telas de admin carregam sob demanda (dispatcher não baixa esse código).
@@ -56,6 +57,7 @@ export default function App() {
               <Route path="/motoristas/:id" element={<MotoristaDetalhe />} />
               <Route path="/alertas" element={<Alertas />} />
               <Route path="/pendencias" element={<Pendencias />} />
+              <Route path="/treinamentos" element={<Treinamentos />} />
               <Route element={<RotaAdmin />}>
                 <Route path="/admin" element={<Painel />} />
                 <Route path="/admin/dispatchers" element={<Dispatchers />} />

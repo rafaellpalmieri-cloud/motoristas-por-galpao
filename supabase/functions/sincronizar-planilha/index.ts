@@ -1,6 +1,7 @@
 // Recebe do Apps Script da planilha interna:
 //  - acao "base": linhas da aba BASE - SUPABASE (CRM), identificadas pelo id do CRM,
 //    com rotas da aba BASE - POWER BI → cadastra, atualiza e segue mudanças de status;
+//  - acao "treinamentos": eventos "TREINAMENTO ..." das agendas dos galpões → treinamentos;
 //  - acao "inativos" (antiga): linhas da aba INATIVOS → inativa quem ainda está ativo (gera alerta);
 //  - acao "ativos": linhas da aba ATIVOS → cadastra novos e atualiza dados (nunca muda status);
 //  - acao "buscar_codigos": { linha, placa, celular } → devolve o código do app (preenchimento único);
@@ -21,6 +22,9 @@ const CAMPOS_CRM = [
   'linha', 'crm_id', 'status', 'nome_completo', 'cpf', 'celular', 'galpao', 'modal', 'placa',
   'id_coopmetro', 'encerramento_motivo', 'atualizado_crm', 'qtd_rotas', 'ultima_rota',
 ]
+
+// Do evento da agenda só vão nome, galpão, telefone e horário (a descrição não sai do script).
+const CAMPOS_TREINAMENTO = ['evento_id', 'galpao', 'nome', 'telefone', 'inicio']
 
 const FUNCOES = {
   base: 'sincronizar_base_crm',
@@ -67,6 +71,7 @@ Deno.serve(async (req) => {
   const admin = createClient(url, serviceKey, { auth: { persistSession: false, autoRefreshToken: false } })
 
   if (corpo.acao === 'backup') return json(await gerarBackup(admin))
+  if (corpo.acao === 'treinamentos') return await sincronizarTreinamentos(admin, corpo as Record<string, unknown>)
 
   const acao = (corpo.acao ?? 'inativos') as keyof typeof FUNCOES
   if (!(acao in FUNCOES)) return json({ erro: 'Ação inválida.' }, 400)
@@ -91,6 +96,30 @@ Deno.serve(async (req) => {
   }
   return json(data)
 })
+
+/** Agendas dos galpões → treinamentos. Corpo: { eventos: [...], de, ate } (ISO). */
+async function sincronizarTreinamentos(admin: SupabaseClient, corpo: Record<string, unknown>) {
+  if (!Array.isArray(corpo.eventos)) return json({ erro: 'Esperado { "eventos": [...] }.' }, 400)
+  if (corpo.eventos.length > 2000) return json({ erro: 'Máximo de 2000 eventos por envio.' }, 400)
+  const eventos = corpo.eventos.map((bruto) => {
+    const e = (bruto ?? {}) as Record<string, unknown>
+    const limpo: Record<string, string> = {}
+    for (const c of CAMPOS_TREINAMENTO) {
+      if (e[c] !== undefined && e[c] !== null) limpo[c] = String(e[c]).slice(0, 300)
+    }
+    return limpo
+  })
+  const { data, error } = await admin.rpc('sincronizar_treinamentos', {
+    p_eventos: eventos,
+    p_de: String(corpo.de ?? ''),
+    p_ate: String(corpo.ate ?? ''),
+  })
+  if (error) {
+    console.error(error)
+    return json({ erro: 'Falha ao sincronizar.' }, 500)
+  }
+  return json(data)
+}
 
 /** Lê uma tabela inteira em páginas de 1000 linhas. */
 async function lerTudo(admin: SupabaseClient, tabela: string, colunas: string, ordem: string) {
