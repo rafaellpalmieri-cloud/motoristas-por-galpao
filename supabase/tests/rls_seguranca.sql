@@ -1579,6 +1579,85 @@ end;
 $$;
 reset role;
 
+-- BASE - SUPABASE (CRM): só service_role sincroniza; o CRM manda no status só quando ele muda.
+select set_config('request.jwt.claims', '{"sub":"00000000-0000-4000-a000-000000000001","role":"authenticated"}', true);
+set local role authenticated;
+do $$
+begin
+  perform public.sincronizar_base_crm('[]'::jsonb);
+  raise exception 'FALHOU: usuário logado executou sincronizar_base_crm';
+exception when insufficient_privilege then raise notice 'OK: só a Edge Function sincroniza a base do CRM';
+end;
+$$;
+reset role;
+
+set local role service_role;
+do $$
+declare r jsonb; v_m public.motoristas;
+begin
+  r := public.sincronizar_base_crm('[
+    {"linha":2,"crm_id":"70000000-0000-4000-a000-000000000001","status":"ativo","nome_completo":"Teste Crm Um",
+     "cpf":"1234567890","celular":"(21) 90000-0001","galpao":"SRJ1","modal":"passeio","placa":"tst-1a11",
+     "id_coopmetro":"99001","qtd_rotas":"12","ultima_rota":"2026-10-20"},
+    {"linha":3,"crm_id":"70000000-0000-4000-a000-000000000002","status":"pausado","nome_completo":"Teste Crm Dois",
+     "galpao":"SRJ2","atualizado_crm":"2026-09-01T12:00:00+00:00"},
+    {"linha":4,"crm_id":"70000000-0000-4000-a000-000000000003","status":"cancelado","nome_completo":"Teste Crm Tres"},
+    {"linha":5,"crm_id":"nao-e-uuid","status":"ativo"}
+  ]'::jsonb);
+  if (r ->> 'novos')::int <> 2 or (r ->> 'ignorados')::int <> 1 or jsonb_array_length(r -> 'erros') <> 1 then
+    raise exception 'FALHOU: resultado inesperado da base do CRM: %', r;
+  end if;
+  select * into v_m from public.motoristas where crm_id = '70000000-0000-4000-a000-000000000001';
+  if v_m.codigo <> '99001' or v_m.status <> 'ativo' or v_m.cpf <> '01234567890' or v_m.placa <> 'TST1A11'
+     or v_m.qtd_rotas <> 12 or not v_m.realizou_rotas or v_m.nome_completo <> 'TESTE CRM UM' then
+    raise exception 'FALHOU: cadastro do CRM gravado errado';
+  end if;
+  select * into v_m from public.motoristas where crm_id = '70000000-0000-4000-a000-000000000002';
+  if v_m.status <> 'inativo' or v_m.codigo not like 'CRM-%' or v_m.inativo_desde <> '2026-09-01' then
+    raise exception 'FALHOU: pausado do CRM deveria entrar inativo com código provisório';
+  end if;
+  raise notice 'OK: base do CRM cadastra ativo e pausado, ignora cancelado e rejeita id inválido';
+end;
+$$;
+reset role;
+
+-- App inativa o motorista 1; o CRM continua "ativo" → a sincronização não desfaz.
+update public.motoristas set status = 'inativo' where crm_id = '70000000-0000-4000-a000-000000000001';
+set local role service_role;
+do $$
+begin
+  perform public.sincronizar_base_crm('[{"crm_id":"70000000-0000-4000-a000-000000000001","status":"ativo"}]'::jsonb);
+  if (select status from public.motoristas where crm_id = '70000000-0000-4000-a000-000000000001') <> 'inativo' then
+    raise exception 'FALHOU: sincronização desfez a inativação feita no app';
+  end if;
+  raise notice 'OK: status do CRM sem mudança não desfaz o que foi feito no app';
+end;
+$$;
+reset role;
+
+-- CRM passa a "inativo" e depois volta a "ativo": o app acompanha e grava histórico.
+update public.motoristas set status = 'ativo' where crm_id = '70000000-0000-4000-a000-000000000001';
+set local role service_role;
+do $$
+declare r jsonb;
+begin
+  r := public.sincronizar_base_crm('[{"crm_id":"70000000-0000-4000-a000-000000000001","status":"inativo","encerramento_motivo":"desistiu"}]'::jsonb);
+  if (r ->> 'inativados')::int <> 1 or not exists (
+       select 1 from public.motorista_historico h join public.motoristas m on m.id = h.motorista_id
+        where m.crm_id = '70000000-0000-4000-a000-000000000001' and h.status_novo = 'inativo'
+          and h.origem = 'planilha' and h.observacao like 'Inativado no CRM%desistiu') then
+    raise exception 'FALHOU: inativação no CRM não chegou ao app: %', r;
+  end if;
+  r := public.sincronizar_base_crm('[{"crm_id":"70000000-0000-4000-a000-000000000001","status":"ativo","id_coopmetro":"99001"}]'::jsonb);
+  if (r ->> 'reativados')::int <> 1
+     or (select status from public.motoristas where crm_id = '70000000-0000-4000-a000-000000000001') <> 'ativo' then
+    raise exception 'FALHOU: reativação no CRM não chegou ao app: %', r;
+  end if;
+  raise notice 'OK: inativação e reativação no CRM chegam ao app com histórico';
+end;
+$$;
+reset role;
+
 do $$ begin raise notice '=== TODOS OS TESTES PASSARAM ==='; end $$;
 
 rollback;
