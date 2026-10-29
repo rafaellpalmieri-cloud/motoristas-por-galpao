@@ -1712,14 +1712,19 @@ begin
 
   select id into v_id from public.treinamentos where evento_id = 'ev-futuro-srj1';
   begin
-    perform public.marcar_presenca_treinamento(v_id, 'compareceu', null);
+    perform public.marcar_presenca_treinamento(v_id, 'compareceu', 'Treino ok');
     raise exception 'FALHOU: presença marcada antes do horário';
   exception when invalid_parameter_value then null;
   end;
   select id into v_id from public.treinamentos where evento_id = 'ev-passado-srj1';
+  begin
+    perform public.marcar_presenca_treinamento(v_id, 'faltou', '  ');
+    raise exception 'FALHOU: presença salva sem comentário';
+  exception when invalid_parameter_value then raise notice 'OK: presença exige comentário';
+  end;
   perform public.marcar_presenca_treinamento(v_id, 'faltou', 'Não apareceu');
   begin
-    perform public.marcar_presenca_treinamento(v_id, 'compareceu', null);
+    perform public.marcar_presenca_treinamento(v_id, 'compareceu', 'Chegou depois');
     raise exception 'FALHOU: dispatcher trocou presença já marcada';
   exception when insufficient_privilege then null;
   end;
@@ -1736,7 +1741,7 @@ set local role authenticated;
 do $$
 begin
   perform public.marcar_presenca_treinamento(
-    (select id from public.treinamentos where evento_id = 'ev-passado-srj1'), 'compareceu', null);
+    (select id from public.treinamentos where evento_id = 'ev-passado-srj1'), 'compareceu', 'Treino ok');
   raise exception 'FALHOU: dispatcher SRJ2 marcou presença no SRJ1';
 exception when insufficient_privilege then raise notice 'OK: dispatcher não marca presença em outro galpão';
 end;

@@ -414,17 +414,27 @@ function ModalPresenca({
             ))}
           </div>
           <label className="flex flex-col gap-1.5">
-            <span className="px-1 text-[13px] font-medium uppercase tracking-wide text-slate-500">Observação (opcional)</span>
+            <span className="px-1 text-[13px] font-medium uppercase tracking-wide text-slate-500">Comentário (obrigatório)</span>
             <textarea
               value={observacao}
               onChange={(e) => setObservacao(e.target.value)}
               maxLength={500}
               rows={3}
-              className="rounded-xl bg-white px-4 py-2.5 text-[17px] shadow-[inset_0_0_0_0.5px_rgb(0_0_0/0.08)] focus:outline-none focus:ring-4 focus:ring-sky-100"
+              required
+              placeholder={
+                presenca === 'faltou'
+                  ? 'Motivo da falta: avisou? não atendeu? quer remarcar?'
+                  : 'Como foi o treinamento: pontual, acompanhou a rota, está pronto para rodar?'
+              }
+              className="rounded-xl bg-white px-4 py-2.5 text-[17px] shadow-[inset_0_0_0_0.5px_rgb(0_0_0/0.08)] placeholder:text-slate-400 focus:outline-none focus:ring-4 focus:ring-sky-100"
             />
           </label>
           {!corrigindo && <p className="text-sm text-slate-500">Depois de salvar, só o admin consegue corrigir.</p>}
-          <Botao disabled={!presenca} carregando={marcar.isPending} onClick={() => salvar(presenca)}>
+          <Botao
+            disabled={!presenca || observacao.trim().length < 3}
+            carregando={marcar.isPending}
+            onClick={() => salvar(presenca)}
+          >
             Salvar
           </Botao>
           {ehAdmin && corrigindo && (
