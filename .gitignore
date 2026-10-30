@@ -35,3 +35,6 @@ deno.lock
 
 # Backups do banco (dados reais, nunca versionar)
 backups/
+supabase/.crm_leitura.sql
+supabase/.crm_db_url
+supabase/.crm_leitura_senha

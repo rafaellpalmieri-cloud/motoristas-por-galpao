@@ -427,6 +427,9 @@ verify_jwt = false
 [functions.sincronizar-planilha]
 verify_jwt = false
 
+[functions.sincronizar-crm]
+verify_jwt = false
+
 # Chamada pelo gatilho do banco (pg_net); autentica por x-webhook-token.
 [functions.notificar-movimentacao]
 verify_jwt = false

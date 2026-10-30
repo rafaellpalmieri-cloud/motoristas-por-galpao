@@ -1766,6 +1766,62 @@ end;
 $$;
 reset role;
 
+-- ---------------------------------------------------------------------
+-- CRM direto: rotas por CPF (BASE - POWER BI) e disparo agendado.
+-- ---------------------------------------------------------------------
+select set_config('request.jwt.claims', '{"sub":"00000000-0000-4000-a000-000000000001","role":"authenticated"}', true);
+set local role authenticated;
+do $$
+begin
+  begin
+    perform public.sincronizar_rotas_cpf('[]'::jsonb);
+    raise exception 'FALHOU: usuário logado (admin) chamou sincronizar_rotas_cpf';
+  exception when insufficient_privilege then null;
+  end;
+  begin
+    perform public.disparar_sincronizacao_crm();
+    raise exception 'FALHOU: usuário logado (admin) disparou a sincronização do CRM';
+  exception when insufficient_privilege then null;
+  end;
+  raise notice 'OK: rotas por CPF e sincronização do CRM não podem ser chamadas pelo app';
+end;
+$$;
+reset role;
+
+do $$
+declare r jsonb; v_id uuid;
+begin
+  insert into public.motoristas (codigo, nome_completo, cpf, placa, galpao, status, qtd_rotas, ultima_rota)
+  values ('TESTE-ROTAS', 'MOTORISTA FICTICIO ROTAS', '00011122233', 'ROT1A23', 'SRJ1', 'ativo', 3, '2026-10-01'),
+         ('TESTE-ROTAS2', 'MOTORISTA FICTICIO SEM ROTA', '00011122244', 'ROT1A24', 'SRJ1', 'ativo', 5, '2026-09-01');
+  r := public.sincronizar_rotas_cpf('[
+    {"cpf":"011122233","qtd_rotas":"12","ultima_rota":"2026-10-20"},
+    {"cpf":"98765432100","qtd_rotas":"4","ultima_rota":"2026-10-20"},
+    {"cpf":"abc","qtd_rotas":"1"}
+  ]'::jsonb);
+  if (r ->> 'atualizados')::int <> 1 or (r ->> 'sem_cadastro')::int <> 1 or (r ->> 'erros')::int <> 1 then
+    raise exception 'FALHOU: resultado inesperado de sincronizar_rotas_cpf: %', r;
+  end if;
+  if not exists (select 1 from public.motoristas where codigo = 'TESTE-ROTAS'
+                 and qtd_rotas = 12 and realizou_rotas and ultima_rota = '2026-10-20') then
+    raise exception 'FALHOU: rotas não atualizadas pelo CPF (com zero à esquerda perdido)';
+  end if;
+  if not exists (select 1 from public.motoristas where codigo = 'TESTE-ROTAS2' and qtd_rotas = 5) then
+    raise exception 'FALHOU: CPF fora da lista teve as rotas alteradas';
+  end if;
+
+  -- A base do CRM sem qtd_rotas não apaga as rotas.
+  v_id := gen_random_uuid();
+  update public.motoristas set crm_id = v_id, crm_status = 'ativo' where codigo = 'TESTE-ROTAS';
+  perform public.sincronizar_base_crm(jsonb_build_array(jsonb_build_object(
+    'crm_id', v_id, 'status', 'ativo', 'nome_completo', 'Motorista Ficticio Rotas', 'cpf', '00011122233')));
+  if not exists (select 1 from public.motoristas where codigo = 'TESTE-ROTAS' and qtd_rotas = 12) then
+    raise exception 'FALHOU: sincronização do CRM sem rotas apagou as rotas';
+  end if;
+  raise notice 'OK: rotas por CPF atualizam só quem está na lista, e o CRM direto não apaga rotas';
+end;
+$$;
+
 do $$ begin raise notice '=== TODOS OS TESTES PASSARAM ==='; end $$;
 
 rollback;

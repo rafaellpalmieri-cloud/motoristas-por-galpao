@@ -1,10 +1,13 @@
 # Integração com a planilha interna (Google Sheets)
 
-A planilha **RELAÇÃO INTERNA ATIVOS E INATIVOS** é a fonte dos motoristas. Desde 28/10/2026 o app lê a aba **BASE - SUPABASE**, uma exportação do CRM de cadastros sem fórmulas, a cada 15 minutos. As rotas vêm da aba **BASE - POWER BI**. As abas ATIVOS e INATIVOS **não são mais usadas**.
+> **Desde 30/10/2026 os motoristas vêm direto do CRM**, sem passar pela planilha. A planilha continua mandando só as **rotas** (aba BASE - POWER BI) e os treinamentos. Veja [Leitura direta do CRM](#leitura-direta-do-crm-desde-30102026) abaixo. As regras de status desta página continuam valendo.
 
 ```
-BASE - SUPABASE + BASE - POWER BI ──Apps Script, a cada 15 min──▶ Edge Function sincronizar-planilha (ação "base") ──▶ banco do app
+CRM (Supabase "Loogirio", visão app_frota.motoristas) ──Edge Function sincronizar-crm, a cada 5 min (pg_cron)──▶ banco do app
+BASE - POWER BI ──Apps Script, a cada 15 min──▶ Edge Function sincronizar-planilha (ação "rotas") ──▶ rotas por CPF
 ```
+
+Antes disso, a aba **BASE - SUPABASE** (exportação do CRM) era lida pelo Apps Script (ação "base"). Essa função continua no script como reserva (`sincronizarBase`), para usar à mão se o acesso direto ao CRM sair do ar. As abas ATIVOS e INATIVOS **não são mais usadas**.
 
 | Status no CRM | No app |
 |---|---|
@@ -33,6 +36,21 @@ O token da sincronização fica no arquivo `supabase/.planilha_sync_token`, que 
    - Valor: o conteúdo do arquivo `supabase/.planilha_sync_token`
 4. **Sincronizar:** escolha **`sincronizarTudo`** e clique em **Executar**. O registro mostra `BASE - SUPABASE: {...}` com novos, atualizados, inativados, reativados, ignorados e erros.
 5. **Automático:** escolha **`instalarGatilho`** e clique em **Executar**. Isso troca o gatilho antigo pelo novo, que roda `sincronizarTudo` a cada 15 minutos. Para conferir: ⏰ **Acionadores**.
+
+## Leitura direta do CRM (desde 30/10/2026)
+
+- O CRM é o projeto Supabase **"Loogirio"** da empresa, tabela `cadastros`. O app **só lê**, por um usuário de banco próprio (`app_frota_leitura`) que enxerga **apenas** a visão `app_frota.motoristas`, com as mesmas colunas que a aba BASE - SUPABASE tinha. Nunca a chave `service_role` do CRM.
+- A visão fica no schema `app_frota`, que não aparece na API do CRM. RG, endereço, filiação, renavam e chassi nem estão na visão.
+- A Edge Function `sincronizar-crm` roda a cada 5 minutos (pg_cron `sincronizar-crm`) e usa a mesma regra de antes (`sincronizar_base_crm`). Ela não mexe em rotas.
+- Secret: `CRM_DB_URL` (connection string do pooler do CRM com o usuário só-leitura), lido do arquivo `supabase/.crm_db_url`, fora do git.
+
+**Ligar (uma vez):**
+1. No painel do Supabase **Loogirio** → SQL Editor, cole e rode o arquivo `supabase/.crm_leitura.sql` (já tem a senha gerada; fica só no seu computador). O modelo sem senha está em [`docs/crm/leitura-app-frota.sql`](crm/leitura-app-frota.sql). No fim, a conferência deve listar só `app_frota.motoristas`.
+2. Monte `supabase/.crm_db_url`: `postgresql://app_frota_leitura.<ref do CRM>:<senha>@<host do pooler>:5432/postgres` (host em **Connect → Session pooler** do projeto Loogirio).
+3. Cadastre o secret: `npx supabase secrets set "CRM_DB_URL=$(cat supabase/.crm_db_url)" --project-ref idihrzbchxaptjgvsjfu`.
+4. Depois que a primeira sincronização der certo, cole o Apps Script novo e rode `instalarGatilho` (ele passa a mandar só as rotas).
+
+**Desligar:** no CRM, `drop owned by app_frota_leitura; drop role app_frota_leitura;`. No app, `select cron.unschedule('sincronizar-crm');` numa migração nova, e volte o Apps Script para `sincronizarBase`.
 
 ## Treinamentos (agendas dos galpões)
 
@@ -63,7 +81,7 @@ O mesmo script faz uma cópia de segurança toda semana, aos domingos às 3h. O 
 
 ## No dia a dia
 
-Tudo é feito no CRM; a aba BASE - SUPABASE se atualiza a partir dele e o app acompanha em até 15 minutos.
+Tudo é feito no CRM; o app lê o CRM direto e acompanha em até 5 minutos. As rotas acompanham a aba BASE - POWER BI em até 15 minutos.
 
 - **Motorista novo:** quando o cadastro fica ativo no CRM, ele entra no app como ativo.
 - **Inativar ou pausar:** mude o status no CRM. O app inativa, grava no histórico e os dispatchers do galpão recebem o alerta.

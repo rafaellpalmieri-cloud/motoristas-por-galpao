@@ -4,14 +4,14 @@
        * Cole este arquivo em: Planilha → Extensões → Apps Script (substituindo tudo).
        * Passo a passo completo: docs/PLANILHA_SHEETS.md
        *
-       * Origem dos motoristas: aba "BASE - SUPABASE" (exportação do CRM, sem fórmulas).
-       * Cada cadastro é identificado pelo "id" do CRM. As rotas vêm da aba
-       * "BASE - POWER BI", somadas por CPF. As abas ATIVOS e INATIVOS não são mais usadas.
+       * Desde 30/10/2026 os motoristas vêm DIRETO do CRM (função sincronizar-crm do app,
+       * a cada 5 min). Este script manda só as ROTAS da aba "BASE - POWER BI", somadas
+       * por CPF, e os treinamentos. A aba "BASE - SUPABASE" não é mais lida no automático.
        *
        * Funções para executar:
-       *  - sincronizarTudo     → envia a BASE - SUPABASE (com as rotas) ao app: cadastra,
-       *                           atualiza dados e segue as mudanças de status do CRM.
-       *                           Depois envia os treinamentos das agendas dos galpões.
+       *  - sincronizarTudo     → envia as rotas por CPF e os treinamentos das agendas.
+       *  - sincronizarBase     → (reserva) envia a aba BASE - SUPABASE com as rotas, como
+       *                           antes. Use só se o acesso direto ao CRM estiver fora do ar.
        *  - instalarGatilho     → UMA vez: agenda sincronizarTudo a cada 15 minutos e o
        *                           backup semanal (domingo de madrugada).
        *  - pausarSincronizacao → desliga a sincronização automática.
@@ -193,6 +193,20 @@
           (exemplosErro.length ? '\n  ' + exemplosErro.join('\n  ') : ''));
       }
       
+      /** BASE - POWER BI → app: só as rotas, já somadas por CPF. */
+      function sincronizarRotas() {
+        const rotas = rotasPorCpf_();
+        const linhas = Object.keys(rotas).map(function (cpf) {
+          return { cpf: cpf, qtd_rotas: String(rotas[cpf].qtd), ultima_rota: rotas[cpf].ultima };
+        });
+        const total = { enviados: linhas.length, atualizados: 0, sem_cadastro: 0, erros: 0 };
+        enviar_('rotas', linhas).forEach(function (r) {
+          ['atualizados', 'sem_cadastro', 'erros'].forEach(function (k) { total[k] += r[k] || 0; });
+        });
+        console.log('BASE - POWER BI (rotas): ' + JSON.stringify(total) +
+          ' (sem_cadastro = CPFs do Power BI que não estão no app)');
+      }
+
       // ---------------------------------------------------------------------
       // Treinamentos: agendas dos galpões (Google Agenda) → app.
       // Os IDs das agendas ficam na propriedade do script AGENDAS_TREINAMENTO,
@@ -266,7 +280,7 @@
       /** Executado pelo gatilho. Uma parte com erro não impede a outra. */
       function sincronizarTudo() {
         const falhas = [];
-        [sincronizarBase, sincronizarTreinamentos].forEach(function (passo) {
+        [sincronizarRotas, sincronizarTreinamentos].forEach(function (passo) {
           try {
             passo();
           } catch (e) {

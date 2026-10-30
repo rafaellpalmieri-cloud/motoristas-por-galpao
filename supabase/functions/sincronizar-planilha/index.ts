@@ -1,5 +1,7 @@
 // Recebe do Apps Script da planilha interna:
-//  - acao "base": linhas da aba BASE - SUPABASE (CRM), identificadas pelo id do CRM,
+//  - acao "rotas": aba BASE - POWER BI já somada por CPF { cpf, qtd_rotas, ultima_rota }
+//    → atualiza só as rotas (os cadastros vêm do CRM pela função sincronizar-crm);
+//  - acao "base" (antiga): linhas da aba BASE - SUPABASE (CRM), identificadas pelo id do CRM,
 //    com rotas da aba BASE - POWER BI → cadastra, atualiza e segue mudanças de status;
 //  - acao "treinamentos": eventos "TREINAMENTO ..." das agendas dos galpões → treinamentos;
 //  - acao "inativos" (antiga): linhas da aba INATIVOS → inativa quem ainda está ativo (gera alerta);
@@ -13,7 +15,7 @@
 //
 // Só os campos das listas abaixo são repassados ao banco. Qualquer outro
 // (RG, endereço...) é descartado aqui, mesmo que venha por engano.
-// CPF e dados de rota só são aceitos nas ações "ativos" e "complemento".
+// CPF e dados de rota só são aceitos nas ações "rotas", "base", "ativos" e "complemento".
 import { createClient, type SupabaseClient } from 'npm:@supabase/supabase-js@2'
 
 const CAMPOS_BASE = ['linha', 'codigo', 'nome_completo', 'celular', 'placa', 'galpao', 'modal', 'data', 'motivo']
@@ -22,12 +24,14 @@ const CAMPOS_CRM = [
   'linha', 'crm_id', 'status', 'nome_completo', 'cpf', 'celular', 'galpao', 'modal', 'placa',
   'id_coopmetro', 'encerramento_motivo', 'atualizado_crm', 'qtd_rotas', 'ultima_rota',
 ]
+const CAMPOS_ROTAS = ['cpf', 'qtd_rotas', 'ultima_rota']
 
 // Do evento da agenda só vão nome, galpão, telefone e horário (a descrição não sai do script).
 const CAMPOS_TREINAMENTO = ['evento_id', 'galpao', 'nome', 'telefone', 'inicio']
 
 const FUNCOES = {
   base: 'sincronizar_base_crm',
+  rotas: 'sincronizar_rotas_cpf',
   inativos: 'sincronizar_inativos_planilha',
   ativos: 'sincronizar_ativos_planilha',
   buscar_codigos: 'buscar_codigos_planilha',
@@ -81,7 +85,11 @@ Deno.serve(async (req) => {
   const linhas = corpo.linhas.map((bruta) => {
     const l = (bruta ?? {}) as Record<string, unknown>
     const limpa: Record<string, string> = {}
-    const campos = acao === 'base' ? CAMPOS_CRM : acao === 'ativos' || acao === 'complemento' ? CAMPOS_ATIVOS : CAMPOS_BASE
+    const campos =
+      acao === 'base' ? CAMPOS_CRM
+      : acao === 'rotas' ? CAMPOS_ROTAS
+      : acao === 'ativos' || acao === 'complemento' ? CAMPOS_ATIVOS
+      : CAMPOS_BASE
     for (const c of campos) {
       const v = l[c]
       if (v !== undefined && v !== null) limpa[c] = String(v).slice(0, 200)
