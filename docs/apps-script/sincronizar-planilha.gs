@@ -119,22 +119,63 @@
         return d.length >= 9 && d.length <= 11 ? ('00' + d).slice(-11) : '';
       }
       
+      /**
+       * Todos os CPFs de uma célula. No Power BI, motoristas com o mesmo nome saem numa
+       * linha por placa, com os CPFs juntos na mesma célula ("111... / 222..." ou "111...222...").
+       */
+      function cpfs_(v) {
+        const lista = [];
+        (String(v === null || v === undefined ? '' : v).match(/\d[\d.\-]*/g) || []).forEach(function (trecho) {
+          const d = trecho.replace(/\D/g, '');
+          if (d.length >= 9 && d.length <= 11) lista.push(('00' + d).slice(-11));
+          else if (d.length > 11 && d.length % 11 === 0) {
+            for (let i = 0; i < d.length; i += 11) lista.push(d.slice(i, i + 11));
+          }
+        });
+        return lista.filter(function (cpf, i) { return lista.indexOf(cpf) === i; });
+      }
+
+      /** Coluna de placa da aba (primeiro cabeçalho com "placa"); sem ela, lista vazia. */
+      function colunaPlaca_(aba, total) {
+        const cabecalho = aba.getRange(1, 1, 1, aba.getLastColumn()).getValues()[0].map(normalizar_);
+        const i = cabecalho.findIndex(function (c) { return /placa/.test(c); });
+        if (i < 0 || total < 1) return [];
+        return aba.getRange(2, i + 1, total, 1).getValues().map(function (r) { return texto_(r[0]); });
+      }
+
       /** BASE - POWER BI → { cpf: { qtd, ultima } } (maior contagem Meli + Shopee e data mais recente). */
       function rotasPorCpf_() {
-        const lido = lerColunas_(aba_(CONFIG.ABA_ROTAS), COLUNAS_ROTAS);
+        const aba = aba_(CONFIG.ABA_ROTAS);
+        const lido = lerColunas_(aba, COLUNAS_ROTAS);
         const v = lido.valores;
+        const placas = colunaPlaca_(aba, lido.total);
+
+        // Linha com um CPF vale para ele. Com vários (homônimos), o app diz de quem é
+        // pela placa; sem placa conhecida, a linha não vale para ninguém.
+        const donos = {};
+        const divididas = [];
+        for (let r = 0; r < lido.total; r++) {
+          const lista = cpfs_(v.cpf[r]);
+          if (lista.length === 1) donos[r] = lista[0];
+          else if (lista.length > 1 && placas[r]) divididas.push({ i: r, cpfs: lista, placa: placas[r] });
+        }
+        if (divididas.length) {
+          enviar_('resolver_placas', divididas).forEach(function (resposta) {
+            resposta.forEach(function (x) { donos[x.i] = x.cpf; });
+          });
+        }
+
         const meli = {};
         const shopee = {};
         const ultima = {};
-        for (let r = 0; r < lido.total; r++) {
-          const cpf = cpf_(v.cpf[r]);
-          if (!cpf) continue;
+        Object.keys(donos).forEach(function (r) {
+          const cpf = donos[r];
           meli[cpf] = Math.max(meli[cpf] || 0, Number(v.rotas_meli[r]) || 0);
           shopee[cpf] = Math.max(shopee[cpf] || 0, Number(v.rotas_shopee[r]) || 0);
           [dataIso_(v.ultima_meli[r]), dataIso_(v.ultima_shopee[r])].forEach(function (d) {
             if (d && (!ultima[cpf] || d > ultima[cpf])) ultima[cpf] = d;
           });
-        }
+        });
         const saida = {};
         Object.keys(meli).forEach(function (cpf) {
           saida[cpf] = { qtd: meli[cpf] + shopee[cpf], ultima: ultima[cpf] || '' };
@@ -205,6 +246,39 @@
         });
         console.log('BASE - POWER BI (rotas): ' + JSON.stringify(total) +
           ' (sem_cadastro = CPFs do Power BI que não estão no app)');
+      }
+
+      /**
+       * Conferência (não envia nada ao app): mostra no registro as linhas da BASE - POWER BI
+       * com mais de um CPF na mesma célula (homônimos) e as linhas cujo nome contém PROCURAR.
+       * Mostra só nome, placa, CPFs e rotas.
+       */
+      function conferirHomonimos() {
+        const PROCURAR = 'LEANDRO OLIVEIRA DA SILVA';
+        const aba = aba_(CONFIG.ABA_ROTAS);
+        const cabecalho = aba.getRange(1, 1, 1, aba.getLastColumn()).getValues()[0].map(normalizar_);
+        const col = function (teste) { return cabecalho.findIndex(teste); };
+        const iNome = col(function (c) { return /nome/.test(c) && !PROIBIDAS.test(c); });
+        const iPlaca = col(function (c) { return /placa/.test(c); });
+        const iCpf = cabecalho.indexOf(COLUNAS_ROTAS.cpf);
+        const iMeli = cabecalho.indexOf(COLUNAS_ROTAS.rotas_meli);
+        const iShopee = cabecalho.indexOf(COLUNAS_ROTAS.rotas_shopee);
+        const total = aba.getLastRow() - 1;
+        if (total < 1) return;
+        const pegar = function (i) {
+          return i < 0 ? [] : aba.getRange(2, i + 1, total, 1).getValues().map(function (r) { return texto_(r[0]); });
+        };
+        const nomes = pegar(iNome), placas = pegar(iPlaca), cpfs = pegar(iCpf), meli = pegar(iMeli), shopee = pegar(iShopee);
+        const alvo = normalizar_(PROCURAR);
+        const linhas = [];
+        for (let r = 0; r < total; r++) {
+          const lista = cpfs_(cpfs[r]);
+          if (lista.length < 2 && !(alvo && normalizar_(nomes[r] || '').indexOf(alvo) >= 0)) continue;
+          linhas.push('linha ' + (r + 2) + ': ' + (nomes[r] || '?') + ' | placa ' + (placas[r] || '-') +
+            ' | CPFs ' + (lista.join(', ') || '-') + ' | rotas Meli ' + (meli[r] || 0) + ', Shopee ' + (shopee[r] || 0));
+        }
+        console.log((iNome < 0 ? '(coluna de nome não encontrada)\n' : '') +
+          linhas.length + ' linha(s):\n' + linhas.join('\n'));
       }
 
       // ---------------------------------------------------------------------

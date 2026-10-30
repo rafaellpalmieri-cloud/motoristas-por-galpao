@@ -3,6 +3,8 @@
 //    → atualiza só as rotas (os cadastros vêm do CRM pela função sincronizar-crm);
 //  - acao "base" (antiga): linhas da aba BASE - SUPABASE (CRM), identificadas pelo id do CRM,
 //    com rotas da aba BASE - POWER BI → cadastra, atualiza e segue mudanças de status;
+//  - acao "resolver_placas": linhas do Power BI com vários CPFs na célula { i, cpfs, placa }
+//    → devolve o CPF do cadastro com aquela placa (homônimos);
 //  - acao "treinamentos": eventos "TREINAMENTO ..." das agendas dos galpões → treinamentos;
 //  - acao "inativos" (antiga): linhas da aba INATIVOS → inativa quem ainda está ativo (gera alerta);
 //  - acao "ativos": linhas da aba ATIVOS → cadastra novos e atualiza dados (nunca muda status);
@@ -76,6 +78,7 @@ Deno.serve(async (req) => {
 
   if (corpo.acao === 'backup') return json(await gerarBackup(admin))
   if (corpo.acao === 'treinamentos') return await sincronizarTreinamentos(admin, corpo as Record<string, unknown>)
+  if (corpo.acao === 'resolver_placas') return await resolverPlacas(admin, corpo.linhas)
 
   const acao = (corpo.acao ?? 'inativos') as keyof typeof FUNCOES
   if (!(acao in FUNCOES)) return json({ erro: 'Ação inválida.' }, 400)
@@ -104,6 +107,29 @@ Deno.serve(async (req) => {
   }
   return json(data)
 })
+
+/**
+ * BASE - POWER BI com vários CPFs na mesma célula (homônimos): { i, cpfs, placa } →
+ * [{ i, cpf }] com o CPF do cadastro que tem aquela placa. Só número da linha, CPFs e placa.
+ */
+async function resolverPlacas(admin: SupabaseClient, linhas: unknown) {
+  if (!Array.isArray(linhas)) return json({ erro: 'Esperado { "linhas": [...] }.' }, 400)
+  if (linhas.length > 1000) return json({ erro: 'Máximo de 1000 linhas por envio.' }, 400)
+  const limpas = linhas.map((bruta) => {
+    const l = (bruta ?? {}) as Record<string, unknown>
+    return {
+      i: Number(l.i) || 0,
+      cpfs: (Array.isArray(l.cpfs) ? l.cpfs : []).slice(0, 10).map((c) => String(c).slice(0, 20)),
+      placa: String(l.placa ?? '').slice(0, 20),
+    }
+  })
+  const { data, error } = await admin.rpc('resolver_cpfs_por_placa', { p_linhas: limpas })
+  if (error) {
+    console.error(error)
+    return json({ erro: 'Falha ao sincronizar.' }, 500)
+  }
+  return json(data)
+}
 
 /** Agendas dos galpões → treinamentos. Corpo: { eventos: [...], de, ate } (ISO). */
 async function sincronizarTreinamentos(admin: SupabaseClient, corpo: Record<string, unknown>) {
