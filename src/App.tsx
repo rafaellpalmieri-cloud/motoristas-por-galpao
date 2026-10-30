@@ -6,6 +6,7 @@ import { Carregando, EstadoVazio } from './components/ui'
 import { configuracaoAusente } from './lib/supabase'
 import Alertas from './pages/Alertas'
 import EsqueciSenha from './pages/EsqueciSenha'
+import Inicio from './pages/Inicio'
 import Login from './pages/Login'
 import MotoristaDetalhe from './pages/MotoristaDetalhe'
 import Pendencias from './pages/Pendencias'
@@ -53,7 +54,8 @@ export default function App() {
           <Route element={<RotaProtegida />}>
             <Route path="/trocar-senha" element={<TrocarSenha />} />
             <Route element={<Layout />}>
-              <Route index element={<Motoristas />} />
+              <Route index element={<Inicio />} />
+              <Route path="/motoristas" element={<Motoristas />} />
               <Route path="/motoristas/:id" element={<MotoristaDetalhe />} />
               <Route path="/alertas" element={<Alertas />} />
               <Route path="/pendencias" element={<Pendencias />} />

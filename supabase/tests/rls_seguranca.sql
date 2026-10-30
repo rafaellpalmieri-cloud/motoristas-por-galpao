@@ -1779,6 +1779,11 @@ begin
   exception when insufficient_privilege then null;
   end;
   begin
+    perform public.resolver_cpfs_por_placa('[]'::jsonb);
+    raise exception 'FALHOU: usuário logado (admin) chamou resolver_cpfs_por_placa';
+  exception when insufficient_privilege then null;
+  end;
+  begin
     perform public.disparar_sincronizacao_crm();
     raise exception 'FALHOU: usuário logado (admin) disparou a sincronização do CRM';
   exception when insufficient_privilege then null;
@@ -1819,6 +1824,38 @@ begin
     raise exception 'FALHOU: sincronização do CRM sem rotas apagou as rotas';
   end if;
   raise notice 'OK: rotas por CPF atualizam só quem está na lista, e o CRM direto não apaga rotas';
+end;
+$$;
+
+-- Homônimos do Power BI: CPFs juntos na célula, o dono sai pela placa.
+do $$
+declare r jsonb;
+begin
+  r := public.resolver_cpfs_por_placa('[
+    {"i":1,"cpfs":["98765432100","011122233"],"placa":"rot-1a23"},
+    {"i":2,"cpfs":["98765432100","00011122233"],"placa":"XYZ9Z99"},
+    {"i":3,"cpfs":["00011122233","00011122244"],"placa":"ROT1A24"},
+    {"i":4,"cpfs":["00011122233"],"placa":""}
+  ]'::jsonb);
+  if r <> '[{"i":1,"cpf":"00011122233"},{"i":3,"cpf":"00011122244"}]'::jsonb then
+    raise exception 'FALHOU: resolver_cpfs_por_placa devolveu %', r;
+  end if;
+  raise notice 'OK: CPF dividido vai só para o cadastro com a placa da linha';
+end;
+$$;
+
+-- Ativo sem nenhum dado de rota (fora do Power BI) conta como "nunca rodou" no painel.
+do $$
+declare v_antes bigint; v_depois bigint;
+begin
+  select coalesce(sum(nunca_rodou), 0) into v_antes from public.painel_atencao() where galpao = 'SRJ17';
+  insert into public.motoristas (codigo, nome_completo, placa, galpao, status)
+  values ('TESTE-SEMDADO', 'MOTORISTA FICTICIO SEM DADO', 'SEM1D00', 'SRJ17', 'ativo');
+  select coalesce(sum(nunca_rodou), 0) into v_depois from public.painel_atencao() where galpao = 'SRJ17';
+  if v_depois <> v_antes + 1 then
+    raise exception 'FALHOU: ativo sem dado de rota não contou como nunca rodou (% → %)', v_antes, v_depois;
+  end if;
+  raise notice 'OK: ativo sem dado de rota conta como nunca rodou no painel';
 end;
 $$;
 

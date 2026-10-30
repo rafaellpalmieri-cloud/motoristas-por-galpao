@@ -457,7 +457,8 @@ async function lembreteSemanal(admin: SupabaseClient) {
   for (const m of ativos) {
     if (!m.galpao) continue
     const c = porGalpao.get(m.galpao) ?? { nunca: 0, parados: 0 }
-    const nunca = m.realizou_rotas === false || m.qtd_rotas === 0
+    // Sem dado de rota (não aparece no Power BI) também conta como nunca rodou.
+    const nunca = m.realizou_rotas !== true || m.qtd_rotas === 0
     if (nunca) c.nunca++
     else if (m.ultima_rota && m.ultima_rota <= limite) c.parados++
     porGalpao.set(m.galpao, c)
@@ -493,7 +494,7 @@ async function lembreteSemanal(admin: SupabaseClient) {
       ]
         .filter(Boolean)
         .join('\n'),
-      url: soma.parados ? '/?status=ativo&rota=parado' : '/?status=ativo&rota=nunca',
+      url: soma.parados ? '/motoristas?status=ativo&rota=parado' : '/motoristas?status=ativo&rota=nunca',
       tag: 'resumo-semanal',
     })
     if ('enviados' in r && r.enviados) avisados++

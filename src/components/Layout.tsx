@@ -4,7 +4,7 @@ import { useContagemAlertas } from '../hooks/motoristas'
 import { agruparPedidos, usePendentes } from '../hooks/solicitacoes'
 import { FaixaNotificacoes } from './AtivarNotificacoes'
 import { BotaoTema } from './BotaoTema'
-import { IconeCapelo, IconeDocumento, IconeEquipe, IconeGrafico, IconeMotoristas, IconeSair, IconeSino } from './Icones'
+import { IconeCapelo, IconeCasa, IconeDocumento, IconeGrafico, IconeMotoristas, IconeSair, IconeSino } from './Icones'
 
 type Icone = (p: { cheio?: boolean; className?: string }) => React.ReactNode
 
@@ -12,7 +12,7 @@ function ItemNav({ para, Icone, rotulo, selo }: { para: string; Icone: Icone; ro
   return (
     <NavLink
       to={para}
-      end={para === '/' || para === '/admin'}
+      end={para === '/'}
       className={({ isActive }) =>
         `relative flex min-h-[52px] flex-1 flex-col items-center justify-center gap-0.5 text-[10px] font-medium tracking-tight ${isActive ? 'text-sky-600' : 'text-slate-400'}`
       }
@@ -91,7 +91,8 @@ export function Layout() {
 
       <nav className="vidro fixed inset-x-0 bottom-0 z-20 border-t border-black/10 pb-[env(safe-area-inset-bottom)]">
         <div className="mx-auto flex max-w-3xl">
-          <ItemNav para="/" Icone={IconeMotoristas} rotulo="Motoristas" />
+          <ItemNav para="/" Icone={IconeCasa} rotulo="Início" />
+          <ItemNav para="/motoristas" Icone={IconeMotoristas} rotulo="Motoristas" />
           <ItemNav para="/alertas" Icone={IconeSino} rotulo="Alertas" selo={alertas} />
           <ItemNav
             para="/pendencias"
@@ -101,7 +102,6 @@ export function Layout() {
           />
           <ItemNav para="/treinamentos" Icone={IconeCapelo} rotulo="Treinos" />
           {ehAdmin && <ItemNav para="/admin" Icone={IconeGrafico} rotulo="Painel" />}
-          {ehAdmin && <ItemNav para="/admin/dispatchers" Icone={IconeEquipe} rotulo="Equipe" />}
         </div>
       </nav>
     </div>

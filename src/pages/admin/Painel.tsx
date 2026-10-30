@@ -1,20 +1,9 @@
-import { useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import { Carregando, Cartao, EstadoErro, EstadoVazio, Pagina } from '../../components/ui'
+import { useResumo, type LinhaPainel } from '../../hooks/painel'
 import { GALPOES, SEM_GALPAO } from '../../lib/constantes'
 import { mensagemErro } from '../../lib/erros'
 import { DIAS_PARADO } from '../../lib/rotas'
-import { supabase } from '../../lib/supabase'
-
-interface LinhaPainel {
-  galpao: string | null
-  ativos: number
-  inativos: number
-  nunca_rodou: number
-  parados_30: number
-  pedidos_pendentes: number
-  pedidos_atrasados: number
-}
 
 const VAZIA = { ativos: 0, inativos: 0, nunca_rodou: 0, parados_30: 0, pedidos_pendentes: 0, pedidos_atrasados: 0 }
 
@@ -35,23 +24,7 @@ function Numero({ valor, rotulo, cor, para }: { valor: number; rotulo: string; c
 }
 
 export default function Painel() {
-  const { data, isPending, error, refetch } = useQuery({
-    queryKey: ['resumo'],
-    queryFn: async () => {
-      const { data, error } = await supabase.rpc('painel_atencao')
-      if (error) throw error
-      return ((data ?? []) as LinhaPainel[]).map((l) => ({
-        ...l,
-        ativos: Number(l.ativos),
-        inativos: Number(l.inativos),
-        nunca_rodou: Number(l.nunca_rodou),
-        parados_30: Number(l.parados_30),
-        pedidos_pendentes: Number(l.pedidos_pendentes),
-        pedidos_atrasados: Number(l.pedidos_atrasados),
-      }))
-    },
-    refetchInterval: 60_000,
-  })
+  const { data, isPending, error, refetch } = useResumo()
 
   const linhas: LinhaPainel[] = [
     ...GALPOES.map((g) => data?.find((d) => d.galpao === g) ?? { galpao: g, ...VAZIA }),
@@ -99,12 +72,12 @@ export default function Painel() {
           <Cartao className="mb-4">
             <p className="mb-1 text-sm font-semibold text-slate-700">Precisa de atenção</p>
             <div className="grid grid-cols-2 gap-1 sm:grid-cols-4">
-              <Numero valor={total.nunca_rodou} rotulo="ativos que nunca rodaram" cor="text-orange-600" para="/?status=ativo&rota=nunca" />
+              <Numero valor={total.nunca_rodou} rotulo="ativos que nunca rodaram" cor="text-orange-600" para="/motoristas?status=ativo&rota=nunca" />
               <Numero
                 valor={total.parados_30}
                 rotulo={`ativos sem rota há ${DIAS_PARADO}+ dias`}
                 cor="text-amber-600"
-                para="/?status=ativo&rota=parado"
+                para="/motoristas?status=ativo&rota=parado"
               />
               <Numero valor={total.pedidos_pendentes} rotulo="pedidos pendentes" cor="text-sky-700" para="/pendencias" />
               <Numero
@@ -134,7 +107,7 @@ export default function Painel() {
                   key={g}
                   className={`rounded-2xl border bg-white p-4 shadow-sm ${l.pedidos_atrasados ? 'border-rose-300' : l.galpao ? 'border-slate-200' : 'border-amber-300'}`}
                 >
-                  <Link to={`/?galpao=${g}`} className="flex items-center justify-between">
+                  <Link to={`/motoristas?galpao=${g}`} className="flex items-center justify-between">
                     <p className="font-bold text-slate-900">{l.galpao ?? 'Sem galpão'}</p>
                     <p className="text-sm">
                       <span className="font-semibold text-emerald-700">{l.ativos} ativos</span>
@@ -147,13 +120,13 @@ export default function Painel() {
                   </div>
                   <div className="mt-3 flex flex-wrap gap-2 text-sm">
                     <Link
-                      to={`/?galpao=${g}&status=ativo&rota=nunca`}
+                      to={`/motoristas?galpao=${g}&status=ativo&rota=nunca`}
                       className={`rounded-full px-3 py-1 font-semibold ${l.nunca_rodou ? 'bg-orange-100 text-orange-800' : 'bg-slate-100 text-slate-400'}`}
                     >
                       {l.nunca_rodou} nunca rodou
                     </Link>
                     <Link
-                      to={`/?galpao=${g}&status=ativo&rota=parado`}
+                      to={`/motoristas?galpao=${g}&status=ativo&rota=parado`}
                       className={`rounded-full px-3 py-1 font-semibold ${l.parados_30 ? 'bg-amber-100 text-amber-800' : 'bg-slate-100 text-slate-400'}`}
                     >
                       {l.parados_30} parados {DIAS_PARADO}+ dias

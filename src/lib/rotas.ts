@@ -15,9 +15,9 @@ export function diasDesdeUltimaRota(ultima: string | null): number | null {
 
 export const DIAS_PARADO = 30
 
-/** Sem nenhuma rota registrada na planilha. */
+/** Sem nenhuma rota no Power BI (inclui quem nem aparece lá: realizou_rotas vazio). */
 export function nuncaRodou(m: Pick<Motorista, 'realizou_rotas' | 'qtd_rotas'>): boolean {
-  return m.realizou_rotas === false || m.qtd_rotas === 0
+  return m.realizou_rotas !== true || m.qtd_rotas === 0
 }
 
 /** Já rodou, mas a última rota foi há DIAS_PARADO dias ou mais. */
@@ -36,6 +36,9 @@ export const FAIXAS_SEM_ROTA = [
   ['15', 'Sem rota há 15 a 19 dias', 15, 19],
   ['20', `Sem rota há ${DIAS_CORTE}+ dias (cortar)`, DIAS_CORTE, Infinity],
 ] as const
+
+/** Atalho da página Início: já rodou, mas está sem rota há estes dias ou mais (filtro "sem10"). */
+export const DIAS_SEM_ROTA_INICIO = 10
 
 /** Dias sem rota de quem já rodou; null se nunca rodou ou não há data. */
 export function diasSemRota(m: Pick<Motorista, 'realizou_rotas' | 'qtd_rotas' | 'ultima_rota'>): number | null {

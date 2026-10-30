@@ -10,7 +10,7 @@ import { useCpfCompleto, useHistorico, useMotorista, useMotoristas } from '../ho
 import { useSolicitacoesDoMotorista } from '../hooks/solicitacoes'
 import { formatarData, formatarDataHora } from '../lib/datas'
 import { mensagemErro } from '../lib/erros'
-import { formatarCpf } from '../lib/rotas'
+import { formatarCpf, nuncaRodou } from '../lib/rotas'
 import { formatarCelular, linkTelefone, linkWhatsApp } from '../lib/telefone'
 
 function Linha({ rotulo, children }: { rotulo: string; children: ReactNode }) {
@@ -38,7 +38,7 @@ export default function MotoristaDetalhe() {
     <button
       type="button"
       // Volta preservando busca e filtros; se abriu o link direto, vai para a lista.
-      onClick={() => (location.key !== 'default' ? navigate(-1) : navigate('/'))}
+      onClick={() => (location.key !== 'default' ? navigate(-1) : navigate('/motoristas'))}
       className="flex min-h-11 items-center px-2 text-sm font-medium text-sky-800"
     >
       ← Voltar
@@ -80,7 +80,7 @@ export default function MotoristaDetalhe() {
           <Linha rotulo="Galpão">{m.galpao ?? 'Sem galpão'}</Linha>
           <Linha rotulo="Celular">{formatarCelular(m.celular)}</Linha>
           <Linha rotulo="CPF">{ehAdmin && cpfCompleto.data ? formatarCpf(cpfCompleto.data) : m.cpf_mascarado}</Linha>
-          <Linha rotulo="Fez rota?">{m.realizou_rotas == null ? '' : m.realizou_rotas ? 'Sim' : 'Não'}</Linha>
+          <Linha rotulo="Fez rota?">{nuncaRodou(m) ? 'Não' : 'Sim'}</Linha>
           <Linha rotulo="Qtd. de rotas">{m.qtd_rotas != null ? String(m.qtd_rotas) : ''}</Linha>
           <Linha rotulo="Última rota">{formatarData(m.ultima_rota)}</Linha>
           {m.status === 'inativo' && <Linha rotulo="Inativo desde">{formatarData(m.inativo_desde)}</Linha>}

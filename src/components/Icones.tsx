@@ -20,6 +20,27 @@ function Base({ children, cheio, ...resto }: Props & { children: React.ReactNode
   )
 }
 
+export function IconeCasa({ cheio, ...p }: Props) {
+  return cheio ? (
+    <Base cheio {...p}>
+      <path d="M11.3 3.3a1 1 0 0 1 1.4 0l8.4 7.9a.8.8 0 0 1-.6 1.4H19v7.2a1.7 1.7 0 0 1-1.7 1.7h-2.8v-5.2a1 1 0 0 0-1-1h-3a1 1 0 0 0-1 1v5.2H6.7A1.7 1.7 0 0 1 5 19.8v-7.2H3.5a.8.8 0 0 1-.6-1.4l8.4-7.9Z" />
+    </Base>
+  ) : (
+    <Base {...p}>
+      <path d="M3.5 11.5 12 3.8l8.5 7.7" />
+      <path d="M5.5 10v9.5c0 .6.4 1 1 1h3.5v-5.5h4v5.5h3.5c.6 0 1-.4 1-1V10" />
+    </Base>
+  )
+}
+
+export function IconeSeta(p: Props) {
+  return (
+    <Base {...p}>
+      <path d="m9 5.5 6.5 6.5L9 18.5" />
+    </Base>
+  )
+}
+
 export function IconeMotoristas({ cheio, ...p }: Props) {
   return cheio ? (
     <Base cheio {...p}>

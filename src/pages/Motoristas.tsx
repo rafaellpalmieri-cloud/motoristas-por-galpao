@@ -10,7 +10,7 @@ import { usePendentes } from '../hooks/solicitacoes'
 import { GALPOES, SEM_GALPAO } from '../lib/constantes'
 import { baixarCsv } from '../lib/csv'
 import { mensagemErro } from '../lib/erros'
-import { DIAS_PARADO, diasSemRota, FAIXAS_SEM_ROTA, formatarCpf, nuncaRodou, parado } from '../lib/rotas'
+import { DIAS_PARADO, DIAS_SEM_ROTA_INICIO, diasSemRota, FAIXAS_SEM_ROTA, formatarCpf, nuncaRodou, parado } from '../lib/rotas'
 import type { Motorista } from '../lib/tipos'
 
 type FiltroStatus = 'todos' | 'ativo' | 'inativo' | 'pausado'
@@ -106,6 +106,7 @@ export default function Motoristas() {
       }
       if (rota === 'nunca' && !nuncaRodou(m)) return false
       if (rota === 'parado' && !parado(m)) return false
+      if (rota === 'sem10' && (diasSemRota(m) ?? -1) < DIAS_SEM_ROTA_INICIO) return false
       if (faixa) {
         const dias = diasSemRota(m)
         if (dias === null || dias < faixa[2] || dias > faixa[3]) return false
@@ -274,6 +275,7 @@ export default function Motoristas() {
           ))}
           {/* Atalho do painel e do lembrete semanal. */}
           {rota === 'parado' && <option value="parado">Sem rota há {DIAS_PARADO}+ dias</option>}
+          {rota === 'sem10' && <option value="sem10">Sem rota há {DIAS_SEM_ROTA_INICIO}+ dias</option>}
         </select>
         {data && (
           <div className="flex flex-wrap items-center gap-2 text-sm">
