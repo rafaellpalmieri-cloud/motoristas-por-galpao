@@ -6,7 +6,7 @@ export function TelaAuth({ titulo, subtitulo, children }: { titulo: string; subt
   return (
     <div className="relative flex min-h-dvh items-center justify-center bg-slate-50 px-4 py-10">
       <BotaoTema className="absolute right-3 top-3 text-sky-600" />
-      <div className="w-full max-w-sm">
+      <div className="w-full max-w-sm animate-entrar">
         <div className="relative mb-7 overflow-hidden rounded-[22px] bg-marinho px-6 pb-6 pt-7 text-center">
           {/* Brilho suave nas cores da marca, sem exagero. */}
           <div className="pointer-events-none absolute -right-10 -top-12 h-40 w-40 rounded-full bg-laranja/25 blur-3xl" aria-hidden />

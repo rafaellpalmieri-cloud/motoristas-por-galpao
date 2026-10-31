@@ -131,7 +131,7 @@ export default function Pendencias() {
           titulo={`${aba === 'pendentes' ? 'Nenhum pedido pendente' : 'Nenhum pedido nos últimos 30 dias'} de ${tipo === 'inativacao' ? 'inativação' : 'reativação'}`}
         />
       ) : (
-        <ul className="flex flex-col gap-3">
+        <ul className="escalonar flex flex-col gap-3">
           {agruparPedidos(filtradas).map((itens) => (
             <li key={itens[0].grupo ?? itens[0].id}>
               <CartaoSolicitacao itens={itens} />

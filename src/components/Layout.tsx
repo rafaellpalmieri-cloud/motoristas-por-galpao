@@ -19,11 +19,15 @@ function ItemNav({ para, Icone, rotulo, selo }: { para: string; Icone: Icone; ro
     >
       {({ isActive }) => (
         <>
-          {isActive && <span className="absolute top-0 h-[3px] w-7 rounded-b-full bg-laranja" aria-hidden />}
-          <Icone cheio={isActive} className="h-[26px] w-[26px]" />
+          {isActive && <span className="absolute top-0 h-[3px] w-7 animate-crescer rounded-b-full bg-laranja" aria-hidden />}
+          {/* A chave troca ao ativar, então o ícone dá um "toque" só nessa hora. */}
+          <Icone key={String(isActive)} cheio={isActive} className={`h-[26px] w-[26px] ${isActive ? 'animate-toque' : ''}`} />
           {rotulo}
           {!!selo && (
-            <span className="absolute left-1/2 top-1 ml-2 min-w-[18px] rounded-full bg-rose-600 px-1 text-center text-[11px] font-semibold leading-[18px] text-white">
+            <span
+              key={selo}
+              className="absolute left-1/2 top-1 ml-2 min-w-[18px] animate-surgir rounded-full bg-rose-600 px-1 text-center text-[11px] font-semibold leading-[18px] text-white"
+            >
               {selo > 99 ? '99+' : selo}
             </span>
           )}
@@ -63,7 +67,10 @@ export function Layout() {
             >
               <IconeSino className="h-6 w-6" />
               {!!alertas && (
-                <span className="absolute right-1 top-1 min-w-[18px] rounded-full bg-rose-600 px-1 text-center text-[11px] font-semibold leading-[18px] text-white">
+                <span
+                  key={alertas}
+                  className="absolute right-1 top-1 min-w-[18px] animate-surgir rounded-full bg-rose-600 px-1 text-center text-[11px] font-semibold leading-[18px] text-white"
+                >
                   {alertas > 99 ? '99+' : alertas}
                 </span>
               )}

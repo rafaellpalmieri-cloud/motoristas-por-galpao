@@ -136,7 +136,7 @@ export default function Treinamentos() {
       ) : consulta.error ? (
         <EstadoErro mensagem={mensagemErro(consulta.error)} aoTentarDeNovo={() => consulta.refetch()} />
       ) : (
-        <div className="flex flex-col gap-6">
+        <div className="escalonar flex flex-col gap-6">
           {aguardando.length > 0 && (
             <Grupo titulo="Marcar presença" qtd={aguardando.length} destaque rodape="✓ compareceu · ✕ faltou">
               {aguardando.map((t) => (
@@ -301,7 +301,7 @@ function Linha({
       <div className="min-w-0">
         <p className="flex items-center gap-1.5">
           <span className="truncate text-[17px] text-slate-900">{t.nome ?? 'Motorista'}</span>
-          {novo && <span className="h-2 w-2 shrink-0 rounded-full bg-sky-600" aria-label="Novo" />}
+          {novo && <span className="h-2 w-2 shrink-0 animate-surgir rounded-full bg-sky-600" aria-label="Novo" />}
         </p>
         <p className="truncate text-[13px] text-slate-500">
           {mostrarGalpao && <span className="font-semibold text-sky-700">{t.galpao}</span>}

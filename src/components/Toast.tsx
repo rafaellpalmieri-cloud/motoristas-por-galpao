@@ -29,7 +29,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
       {children}
       <div aria-live="polite" className="pointer-events-none fixed inset-x-0 bottom-20 z-50 flex flex-col items-center gap-2 px-4">
         {avisos.map((a) => (
-          <div key={a.id} className={`pointer-events-auto w-full max-w-md rounded-xl px-4 py-3 text-white shadow-lg ${cores[a.tipo]}`}>
+          <div key={a.id} className={`pointer-events-auto w-full max-w-md animate-aviso rounded-xl px-4 py-3 text-white shadow-lg ${cores[a.tipo]}`}>
             {a.texto}
           </div>
         ))}

@@ -24,7 +24,7 @@ export function Botao({
     <button
       {...resto}
       disabled={disabled || carregando}
-      className={`inline-flex min-h-11 items-center justify-center gap-2 rounded-xl px-4 py-2 text-[17px] font-semibold tracking-[-0.02em] transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-600 disabled:cursor-not-allowed disabled:opacity-40 ${estilosVariante[variante]} ${className}`}
+      className={`inline-flex min-h-11 items-center justify-center gap-2 rounded-xl px-4 py-2 text-[17px] font-semibold tracking-[-0.02em] transition duration-200 ease-ios active:scale-[0.97] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-600 disabled:cursor-not-allowed disabled:opacity-40 ${estilosVariante[variante]} ${className}`}
     >
       {carregando && <Spinner pequeno />}
       {children}
@@ -77,7 +77,7 @@ export function Carregando({ texto = 'Carregando…' }: { texto?: string }) {
 
 export function EstadoVazio({ titulo, children }: { titulo: string; children?: ReactNode }) {
   return (
-    <div className="mx-auto flex max-w-sm flex-col items-center gap-2 px-4 py-14 text-center">
+    <div className="mx-auto flex max-w-sm animate-entrar flex-col items-center gap-2 px-4 py-14 text-center">
       <svg aria-hidden viewBox="0 0 24 24" className="mb-1 h-12 w-12 text-slate-300" fill="none" stroke="currentColor" strokeWidth="1.5">
         <path d="M3 13h4l2 3h6l2-3h4M5 13l2-8h10l2 8v6a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1v-6Z" strokeLinejoin="round" />
       </svg>
@@ -89,7 +89,7 @@ export function EstadoVazio({ titulo, children }: { titulo: string; children?: R
 
 export function EstadoErro({ mensagem, aoTentarDeNovo }: { mensagem: string; aoTentarDeNovo?: () => void }) {
   return (
-    <div role="alert" className="mx-auto my-6 flex max-w-sm flex-col items-center gap-3 rounded-2xl bg-white p-6 text-center">
+    <div role="alert" className="mx-auto my-6 flex max-w-sm animate-entrar flex-col items-center gap-3 rounded-2xl bg-white p-6 text-center">
       <p className="text-[17px] font-semibold text-slate-900">Algo deu errado</p>
       <p className="text-[15px] text-slate-500">{mensagem}</p>
       {aoTentarDeNovo && (
@@ -192,7 +192,7 @@ export function Cartao({ children, className = '' }: { children: ReactNode; clas
 /** Página com título grande (estilo "Large Title" do iOS). */
 export function Pagina({ titulo, acao, children }: { titulo: string; acao?: ReactNode; children: ReactNode }) {
   return (
-    <div className="mx-auto w-full max-w-3xl px-4 pb-32 pt-3">
+    <div className="mx-auto w-full max-w-3xl animate-esmaecer px-4 pb-32 pt-3">
       <div className="mb-4 flex items-end justify-between gap-3">
         <h1 className="text-[34px] font-bold leading-tight tracking-[-0.03em] text-slate-900">{titulo}</h1>
         {acao}

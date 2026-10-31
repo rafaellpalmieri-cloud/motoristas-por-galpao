@@ -79,6 +79,53 @@
 
   --radius-xl: 0.75rem; /* 12px: botões e campos */
   --radius-2xl: 0.875rem; /* 14px: cartões agrupados */
+
+  /*
+   * Movimento: curto e sutil, no ritmo do iOS. "ios" desacelera no fim
+   * (entradas); "mola" passa um pouco do ponto e volta (selos, avisos).
+   */
+  --ease-ios: cubic-bezier(0.32, 0.72, 0, 1);
+  --ease-mola: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --animate-esmaecer: esmaecer 0.24s ease-out backwards;
+  --animate-entrar: entrar 0.38s var(--ease-ios) backwards;
+  --animate-surgir: surgir 0.34s var(--ease-mola) backwards;
+  --animate-toque: toque 0.36s var(--ease-mola);
+  --animate-crescer: crescer 0.3s var(--ease-ios) backwards;
+  --animate-aviso: aviso 0.42s var(--ease-mola) backwards;
+
+  @keyframes esmaecer {
+    from {
+      opacity: 0;
+    }
+  }
+  @keyframes entrar {
+    from {
+      opacity: 0;
+      transform: translateY(10px);
+    }
+  }
+  @keyframes surgir {
+    from {
+      opacity: 0;
+      transform: scale(0.5);
+    }
+  }
+  @keyframes toque {
+    40% {
+      transform: scale(0.82);
+    }
+  }
+  @keyframes crescer {
+    from {
+      transform: scaleX(0);
+    }
+  }
+  @keyframes aviso {
+    from {
+      opacity: 0;
+      transform: translateY(16px) scale(0.96);
+    }
+  }
 }
 
 html {
@@ -205,6 +252,36 @@ dialog.folha::backdrop {
     transform: translateY(0);
   }
 }
+/* No computador a janela aparece crescendo de leve no centro. */
+@media (min-width: 640px) {
+  dialog.folha[open] {
+    animation: aparecer 0.26s var(--ease-ios);
+  }
+}
+@keyframes aparecer {
+  from {
+    opacity: 0;
+    transform: scale(0.94);
+  }
+}
+dialog.folha[open]::backdrop {
+  animation: esmaecer 0.26s ease-out;
+}
+
+/* Listas: os itens entram em cascata (até o 10º; o resto junto). */
+.escalonar > * {
+  animation: entrar 0.38s var(--ease-ios) backwards;
+}
+.escalonar > :nth-child(2) { animation-delay: 35ms; }
+.escalonar > :nth-child(3) { animation-delay: 70ms; }
+.escalonar > :nth-child(4) { animation-delay: 105ms; }
+.escalonar > :nth-child(5) { animation-delay: 140ms; }
+.escalonar > :nth-child(6) { animation-delay: 175ms; }
+.escalonar > :nth-child(7) { animation-delay: 210ms; }
+.escalonar > :nth-child(8) { animation-delay: 245ms; }
+.escalonar > :nth-child(9) { animation-delay: 280ms; }
+.escalonar > :nth-child(n + 10) { animation-delay: 315ms; }
+
 
 /* Interruptor de opções (controle segmentado) */
 .segmentado {
@@ -219,8 +296,13 @@ dialog.folha::backdrop {
     0 3px 1px rgb(0 0 0 / 0.04);
 }
 
+/* Quem pediu menos movimento no aparelho não vê animação nenhuma. */
 @media (prefers-reduced-motion: reduce) {
-  dialog.folha[open] {
-    animation: none;
+  *:not(.animate-spin),
+  *::before,
+  *::after,
+  dialog.folha::backdrop {
+    animation: none !important;
+    transition-duration: 0.01ms !important;
   }
 }

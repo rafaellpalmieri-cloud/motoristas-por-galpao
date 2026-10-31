@@ -307,7 +307,7 @@ export default function Motoristas() {
         <EstadoVazio titulo="Nenhum resultado">Tente outro nome, placa ou filtro.</EstadoVazio>
       ) : (
         <>
-          <ul className="flex flex-col gap-3">
+          <ul className="escalonar flex flex-col gap-3">
             {pessoas.slice(0, limite).map((placas) => (
               <CardPessoa
                 key={placas[0].pessoa_id ?? placas[0].id}

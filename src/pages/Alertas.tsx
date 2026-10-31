@@ -403,7 +403,7 @@ export default function Alertas() {
               {soNaoLidos ? 'Tudo lido por aqui.' : 'Tente outro período, galpão ou nome.'}
             </EstadoVazio>
           ) : (
-            <ul className="flex flex-col gap-3">
+            <ul className="escalonar flex flex-col gap-3">
               {aba === 'inativacoes' &&
                 inativacoesVisiveis.map(({ a, chave, naoLido }) => (
                   <ItemAlerta key={chave} naoLido={naoLido} aoMarcar={() => marcarComoLido([chave])}>
@@ -480,7 +480,7 @@ function ItemAlerta({ naoLido, aoMarcar, children }: { naoLido: boolean; aoMarca
   return (
     <li className={`rounded-2xl border p-4 ${naoLido ? 'border-amber-300 bg-amber-50' : 'border-slate-200 bg-white'}`}>
       {naoLido && (
-        <span className="mb-2 inline-block rounded-full bg-amber-200 px-2 py-0.5 text-xs font-bold uppercase text-amber-900">
+        <span className="mb-2 inline-block animate-surgir rounded-full bg-amber-200 px-2 py-0.5 text-xs font-bold uppercase text-amber-900">
           Não lido
         </span>
       )}
