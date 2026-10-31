@@ -5,6 +5,7 @@ import { CardPessoa } from '../components/CardPessoa'
 import { ModalStatus, type AlvoStatus } from '../components/ModalStatus'
 import { ehPausado, jaOperou } from '../lib/pausados'
 import { Carregando, EstadoErro, EstadoVazio, Pagina } from '../components/ui'
+import { IconeBaixar } from '../components/Icones'
 import { useCpfsCompletos, useMotoristas } from '../hooks/motoristas'
 import { usePendentes } from '../hooks/solicitacoes'
 import { GALPOES, SEM_GALPAO } from '../lib/constantes'
@@ -186,8 +187,7 @@ export default function Motoristas() {
           aria-label="Buscar por nome, placa ou CPF"
           className="min-h-11 w-full rounded-[10px] border border-transparent bg-[rgb(118_118_128/0.12)] px-4 text-[17px] placeholder:text-slate-400 focus:border-sky-600 focus:outline-none focus:ring-2 focus:ring-sky-200"
         />
-        <div className="flex gap-2">
-          <div role="group" aria-label="Filtrar por status" className="segmentado grid flex-1 grid-cols-4 rounded-[9px] p-0.5">
+        <div role="group" aria-label="Filtrar por status" className="segmentado grid grid-cols-4 rounded-[9px] p-0.5">
             {(
               [
                 ['todos', 'Todos'],
@@ -217,13 +217,14 @@ export default function Motoristas() {
                 {rotulo}
               </button>
             ))}
-          </div>
+        </div>
+        <div className={`grid gap-2 ${mostrarFiltroGalpao ? 'grid-cols-2' : 'grid-cols-1'}`}>
           {mostrarFiltroGalpao && (
             <select
               value={galpao}
               onChange={(e) => definir('galpao', e.target.value)}
               aria-label="Filtrar por galpão"
-              className="min-h-12 rounded-xl border border-black/5 bg-white px-2 text-sm font-medium"
+              className="min-h-11 min-w-0 rounded-xl border border-black/5 bg-white px-3 text-sm font-medium"
             >
               <option value="">{ehAdmin ? 'Todos galpões' : 'Meus galpões'}</option>
               {opcoesGalpao.map((g) => (
@@ -234,6 +235,7 @@ export default function Motoristas() {
               {ehAdmin && <option value={SEM_GALPAO}>Sem galpão</option>}
             </select>
           )}
+          <SeletorRotas rota={rota} aoMudar={(v) => definir('rota', v)} />
         </div>
         {status === 'pausado' && (
           <div role="group" aria-label="Pausados" className="segmentado grid grid-cols-2 rounded-[9px] p-0.5">
@@ -260,40 +262,25 @@ export default function Motoristas() {
             Pausados no CRM. "Já operaram" = têm ID Coopmetro ou já fizeram rota.
           </p>
         )}
-        <select
-          value={rota}
-          onChange={(e) => definir('rota', e.target.value)}
-          aria-label="Filtrar por rotas"
-          className="min-h-11 rounded-xl border border-black/5 bg-white px-3 text-sm font-medium"
-        >
-          <option value="">Rotas: todos</option>
-          <option value="nunca">Nunca fez rota</option>
-          {FAIXAS_SEM_ROTA.map(([valor, rotulo]) => (
-            <option key={valor} value={valor}>
-              {rotulo}
-            </option>
-          ))}
-          {/* Atalho do painel e do lembrete semanal. */}
-          {rota === 'parado' && <option value="parado">Sem rota há {DIAS_PARADO}+ dias</option>}
-          {rota === 'sem10' && <option value="sem10">Sem rota há {DIAS_SEM_ROTA_INICIO}+ dias</option>}
-        </select>
-        {data && (
-          <div className="flex flex-wrap items-center gap-2 text-sm">
-            <span className="rounded-full bg-emerald-100 px-3 py-1 font-semibold text-emerald-800">{contagem.ativos} motoristas ativos</span>
-            <span className="rounded-full bg-rose-50 px-3 py-1 font-semibold text-rose-700">{contagem.inativos} inativos</span>
-            <span className="rounded-full bg-amber-50 px-3 py-1 font-semibold text-amber-800">{contagem.pausados} pausados</span>
-            <span className="px-1 py-1 text-slate-500">{doGalpao.length} placas</span>
-            <button
-              type="button"
-              onClick={exportarCsv}
-              disabled={!pessoas.length}
-              className="ml-auto inline-flex min-h-10 items-center gap-1 rounded-xl border border-slate-300 bg-white px-3 font-semibold text-slate-800 hover:bg-slate-50 disabled:opacity-50"
-            >
-              ⬇ Exportar CSV
-            </button>
-          </div>
-        )}
       </div>
+
+      {data && (
+        <div className="mb-3 flex flex-wrap items-center gap-2 text-[13px]">
+          <span className="rounded-full bg-emerald-50 px-3 py-1 font-semibold text-emerald-700">{contagem.ativos} motoristas ativos</span>
+          <span className="rounded-full bg-rose-50 px-3 py-1 font-semibold text-rose-700">{contagem.inativos} inativos</span>
+          <span className="rounded-full bg-amber-50 px-3 py-1 font-semibold text-amber-800">{contagem.pausados} pausados</span>
+          <span className="px-1 py-1 text-slate-500">{doGalpao.length} placas</span>
+          <button
+            type="button"
+            onClick={exportarCsv}
+            disabled={!pessoas.length}
+            className="ml-auto inline-flex min-h-10 items-center gap-1.5 rounded-xl bg-white px-3 font-semibold text-sky-700 transition active:scale-[0.97] disabled:opacity-40"
+          >
+            <IconeBaixar className="h-4 w-4" />
+          Exportar CSV
+          </button>
+        </div>
+      )}
 
       {isPending ? (
         <Carregando texto="Carregando motoristas…" />
@@ -334,5 +321,27 @@ export default function Motoristas() {
 
       <ModalStatus alvo={alvo} aoFechar={() => setAlvo(null)} />
     </Pagina>
+  )
+}
+
+function SeletorRotas({ rota, aoMudar }: { rota: string; aoMudar: (v: string) => void }) {
+  return (
+    <select
+      value={rota}
+      onChange={(e) => aoMudar(e.target.value)}
+      aria-label="Filtrar por rotas"
+      className="min-h-11 min-w-0 rounded-xl border border-black/5 bg-white px-3 text-sm font-medium"
+    >
+      <option value="">Rotas: todos</option>
+      <option value="nunca">Nunca fez rota</option>
+      {FAIXAS_SEM_ROTA.map(([valor, rotulo]) => (
+        <option key={valor} value={valor}>
+          {rotulo}
+        </option>
+      ))}
+      {/* Atalho do painel e do lembrete semanal. */}
+      {rota === 'parado' && <option value="parado">Sem rota há {DIAS_PARADO}+ dias</option>}
+      {rota === 'sem10' && <option value="sem10">Sem rota há {DIAS_SEM_ROTA_INICIO}+ dias</option>}
+    </select>
   )
 }

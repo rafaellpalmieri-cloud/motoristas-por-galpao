@@ -232,7 +232,7 @@ export default function Alertas() {
     <Pagina titulo="Alertas">
       <CartaoNotificacoes />
 
-      <div className="mb-3 grid grid-cols-4 rounded-xl border border-slate-300 bg-white p-1" role="tablist">
+      <div className="-mx-4 mb-3 flex gap-2 overflow-x-auto px-4 pb-1 [scrollbar-width:none]" role="tablist">
         {(
           [
             ['inativacoes', 'Inativações', naoLidos.inativacoes],
@@ -247,11 +247,11 @@ export default function Alertas() {
             role="tab"
             aria-selected={aba === valor}
             onClick={() => definir({ aba: valor === 'inativacoes' ? '' : valor })}
-            className={`flex min-h-11 items-center justify-center gap-1 rounded-lg px-1 text-sm font-semibold ${aba === valor ? 'bg-sky-700 text-white' : 'text-slate-600'}`}
+            className={`flex min-h-11 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-4 text-[15px] font-semibold transition active:scale-[0.97] ${aba === valor ? 'bg-sky-600 text-white' : 'bg-white text-slate-700'}`}
           >
             {rotulo}
             {qtd > 0 && (
-              <span className="rounded-full bg-amber-400 px-1.5 text-xs font-bold text-amber-950" aria-label={`${qtd} não lidos`}>
+              <span className="min-w-5 rounded-full bg-laranja px-1.5 text-center text-xs font-bold leading-5 text-white" aria-label={`${qtd} não lidos`}>
                 {qtd}
               </span>
             )}

@@ -121,6 +121,24 @@ export function IconeTelefone(p: Props) {
   )
 }
 
+export function IconeRelogio(p: Props) {
+  return (
+    <Base {...p}>
+      <circle cx="12" cy="12" r="8.5" />
+      <path d="M12 7.5V12l3 2" />
+    </Base>
+  )
+}
+
+export function IconeAtencao(p: Props) {
+  return (
+    <Base {...p}>
+      <path d="M10.3 4.6 3.2 17a2 2 0 0 0 1.7 3h14.2a2 2 0 0 0 1.7-3L13.7 4.6a2 2 0 0 0-3.4 0Z" />
+      <path d="M12 9.5v4M12 17h.01" />
+    </Base>
+  )
+}
+
 export function IconeBaixar(p: Props) {
   return (
     <Base {...p}>
