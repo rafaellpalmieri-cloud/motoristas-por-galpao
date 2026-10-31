@@ -66,14 +66,14 @@ export default function Inicio() {
   const data = new Date().toLocaleDateString('pt-BR', { timeZone: fuso, weekday: 'long', day: 'numeric', month: 'long' })
 
   return (
-    <div className="mx-auto w-full max-w-3xl px-4 pb-32 pt-5">
+    <div className="mx-auto w-full max-w-3xl animate-esmaecer px-4 pb-32 pt-5">
       <p className="text-[13px] font-medium uppercase tracking-wide text-slate-400">{data}</p>
       <h1 className="mt-0.5 text-[30px] font-bold leading-tight tracking-[-0.03em] text-slate-900">
         {saudacao()}
         {primeiroNome ? `, ${primeiroNome}` : ''}
       </h1>
 
-      <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-3">
+      <div className="escalonar mt-5 grid grid-cols-2 gap-3 sm:grid-cols-3">
         <Numero valor={ativos?.length} rotulo="placas ativas" para="/motoristas?status=ativo" />
         <Numero valor={nunca} rotulo="ativos que nunca fizeram rota" para="/motoristas?status=ativo&rota=nunca" />
         <Numero
