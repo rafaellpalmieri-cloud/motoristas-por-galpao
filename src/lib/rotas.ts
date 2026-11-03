@@ -45,6 +45,25 @@ export function diasSemRota(m: Pick<Motorista, 'realizou_rotas' | 'qtd_rotas' | 
   return nuncaRodou(m) ? null : diasDesdeUltimaRota(m.ultima_rota)
 }
 
+/**
+ * Ordena as pessoas pelo tempo sem rota, contando a rota mais recente entre as placas.
+ * Quem não tem esse tempo (nunca rodou ou sem data) fica por último nos dois sentidos.
+ */
+export function ordenarPorSemRota<T extends Pick<Motorista, 'realizou_rotas' | 'qtd_rotas' | 'ultima_rota'>>(
+  pessoas: T[][],
+  sentido: 'maior' | 'menor',
+): T[][] {
+  const comDias = pessoas.map((placas) => {
+    const dias = placas.map((p) => diasSemRota(p)).filter((d): d is number => d !== null)
+    return { placas, dias: dias.length ? Math.min(...dias) : null }
+  })
+  comDias.sort((a, b) => {
+    if (a.dias === null || b.dias === null) return (a.dias === null ? 1 : 0) - (b.dias === null ? 1 : 0)
+    return sentido === 'maior' ? b.dias - a.dias : a.dias - b.dias
+  })
+  return comDias.map((p) => p.placas)
+}
+
 export function paraCortar(m: Pick<Motorista, 'realizou_rotas' | 'qtd_rotas' | 'ultima_rota'>): boolean {
   const dias = diasSemRota(m)
   return dias !== null && dias >= DIAS_CORTE

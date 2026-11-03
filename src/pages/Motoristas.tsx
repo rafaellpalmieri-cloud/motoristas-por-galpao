@@ -11,7 +11,7 @@ import { usePendentes } from '../hooks/solicitacoes'
 import { GALPOES, SEM_GALPAO } from '../lib/constantes'
 import { baixarCsv } from '../lib/csv'
 import { mensagemErro } from '../lib/erros'
-import { DIAS_PARADO, DIAS_SEM_ROTA_INICIO, diasSemRota, FAIXAS_SEM_ROTA, formatarCpf, nuncaRodou, parado } from '../lib/rotas'
+import { DIAS_PARADO, DIAS_SEM_ROTA_INICIO, diasSemRota, FAIXAS_SEM_ROTA, formatarCpf, nuncaRodou, ordenarPorSemRota, parado } from '../lib/rotas'
 import type { Motorista } from '../lib/tipos'
 
 type FiltroStatus = 'todos' | 'ativo' | 'inativo' | 'pausado'
@@ -39,6 +39,7 @@ export default function Motoristas() {
   const rota = params.get('rota') ?? ''
   const faixa = FAIXAS_SEM_ROTA.find(([valor]) => valor === rota)
   const galpao = params.get('galpao') ?? ''
+  const ordem = params.get('ordem') ?? ''
 
   function definir(chave: string, valor: string) {
     setLimite(POR_PAGINA)
@@ -132,8 +133,8 @@ export default function Motoristas() {
       vistas.add(chave)
       lista.push(porPessoa.get(chave) ?? [m])
     }
-    return lista
-  }, [filtrados, porPessoa])
+    return ordem === 'maior' || ordem === 'menor' ? ordenarPorSemRota(lista, ordem) : lista
+  }, [filtrados, porPessoa, ordem])
 
   // Admin vê o CPF completo; dispatcher, o mascarado.
   function cpfDaPessoa(placas: Motorista[]): string | null {
@@ -236,6 +237,16 @@ export default function Motoristas() {
             </select>
           )}
           <SeletorRotas rota={rota} aoMudar={(v) => definir('rota', v)} />
+          <select
+            value={ordem}
+            onChange={(e) => definir('ordem', e.target.value)}
+            aria-label="Ordenar motoristas"
+            className={`min-h-11 min-w-0 rounded-xl border border-black/5 bg-white px-3 text-sm font-medium ${mostrarFiltroGalpao ? 'col-span-2' : ''}`}
+          >
+            <option value="">Ordenar: nome (A a Z)</option>
+            <option value="maior">Ordenar: mais tempo sem rota</option>
+            <option value="menor">Ordenar: menos tempo sem rota</option>
+          </select>
         </div>
         {status === 'pausado' && (
           <div role="group" aria-label="Pausados" className="segmentado grid grid-cols-2 rounded-[9px] p-0.5">
