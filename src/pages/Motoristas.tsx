@@ -33,7 +33,7 @@ export default function Motoristas() {
 
   const busca = params.get('q') ?? ''
   const buscaAdiada = useDeferredValue(busca)
-  const status = (params.get('status') as FiltroStatus) || 'todos'
+  const status = (params.get('status') as FiltroStatus) || 'ativo'
   // Dentro de Pausados: quem já operou (padrão) ou quem nunca operou.
   const nuncaOperou = params.get('pausados') === 'nunca'
   const rota = params.get('rota') ?? ''
@@ -205,7 +205,7 @@ export default function Motoristas() {
                   setLimite(POR_PAGINA)
                   setParams(
                     (p) => {
-                      if (valor === 'todos') p.delete('status')
+                      if (valor === 'ativo') p.delete('status')
                       else p.set('status', valor)
                       if (valor !== 'pausado') p.delete('pausados')
                       return p
@@ -302,7 +302,14 @@ export default function Motoristas() {
           {ehAdmin ? 'Importe o CSV na aba CSV para começar.' : 'Ainda não há motoristas nos seus galpões.'}
         </EstadoVazio>
       ) : pessoas.length === 0 ? (
-        <EstadoVazio titulo="Nenhum resultado">Tente outro nome, placa ou filtro.</EstadoVazio>
+        <EstadoVazio titulo="Nenhum resultado">
+          Tente outro nome, placa ou filtro.
+          {status !== 'todos' && (
+            <button type="button" onClick={() => definir('status', 'todos')} className="mt-2 block min-h-11 w-full font-semibold text-sky-700">
+              Procurar em Todos
+            </button>
+          )}
+        </EstadoVazio>
       ) : (
         <>
           {(rota || busca) && (
