@@ -148,6 +148,7 @@ export const chaveAlerta = {
   pedido: (s: { id: number; grupo: string | null }) => `pedido:${s.grupo ?? s.id}`,
   treinamento: (id: number) => `trein:${id}`,
   falta: (id: number) => `falta:${id}`,
+  comparecimento: (id: number) => `comp:${id}`,
 }
 
 /** Chaves dos alertas que o usuário já marcou como lidos. */

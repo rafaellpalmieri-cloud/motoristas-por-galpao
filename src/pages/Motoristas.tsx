@@ -294,6 +294,20 @@ export default function Motoristas() {
         <EstadoVazio titulo="Nenhum resultado">Tente outro nome, placa ou filtro.</EstadoVazio>
       ) : (
         <>
+          {(rota || busca) && (
+            // Resultado do filtro (os atalhos da Início caem aqui): mesmo número do card.
+            <div className="mb-3 flex items-center justify-between gap-2 px-1 text-[15px]">
+              <p className="text-slate-600">
+                <span className="font-semibold text-slate-900">{filtrados.length}</span> placa(s)
+                {pessoas.length !== filtrados.length && ` · ${pessoas.length} motorista(s)`}
+              </p>
+              {rota && (
+                <button type="button" onClick={() => definir('rota', '')} className="min-h-11 px-2 font-semibold text-sky-700">
+                  Limpar filtro de rota
+                </button>
+              )}
+            </div>
+          )}
           <ul className="escalonar flex flex-col gap-3">
             {pessoas.slice(0, limite).map((placas) => (
               <CardPessoa

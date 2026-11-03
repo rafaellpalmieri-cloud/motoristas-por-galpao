@@ -85,5 +85,7 @@ export interface Treinamento {
   presenca_obs: string | null
   presenca_por_nome: string | null
   presenca_em: string | null
+  remarcado_de: string | null
+  remarcado_por_nome: string | null
   criado_em: string
 }

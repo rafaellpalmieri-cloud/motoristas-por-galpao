@@ -5,7 +5,7 @@ import { supabase } from '../lib/supabase'
 import type { Presenca, Treinamento } from '../lib/tipos'
 
 const CAMPOS =
-  'id, galpao, nome, telefone, inicio, status, presenca, presenca_obs, presenca_por_nome, presenca_em, criado_em'
+  'id, galpao, nome, telefone, inicio, status, presenca, presenca_obs, presenca_por_nome, presenca_em, remarcado_de, remarcado_por_nome, criado_em'
 
 /** Mesma janela que o Apps Script lê das agendas: 7 dias para trás, 60 para frente. */
 export const DIAS_ANTES = 7
@@ -43,6 +43,20 @@ export function useMarcarPresenca() {
         p_presenca: presenca,
         p_observacao: observacao?.trim() || null,
       })
+      if (error) throw error
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ['treinamentos'] })
+      queryClient.invalidateQueries({ queryKey: ['alertas'] })
+    },
+  })
+}
+
+export function useRemarcarTreinamento() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: async ({ id, inicio }: { id: number; inicio: string }) => {
+      const { error } = await supabase.rpc('remarcar_treinamento', { p_id: id, p_inicio: inicio })
       if (error) throw error
     },
     onSettled: () => {

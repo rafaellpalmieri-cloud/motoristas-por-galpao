@@ -125,16 +125,20 @@ export default function Alertas() {
     naoLido: !lido(chaveAlerta.pedido(itens[0])),
   }))
 
-  // ----- Treinamentos: dispatcher vê os novos por vir; admin vê as faltas dos últimos 30 dias -----
+  // ----- Treinamentos: dispatcher vê os novos por vir; admin vê as presenças dos últimos 30 dias -----
   const agora = useAgora()
   const itensTreino = (treinamentos.data ?? [])
     .filter((t) =>
       ehAdmin
-        ? t.presenca === 'faltou' && !!t.presenca_em && t.presenca_em.slice(0, 10) >= inicioNaoLidos
+        ? !!t.presenca && !!t.presenca_em && t.presenca_em.slice(0, 10) >= inicioNaoLidos
         : t.status === 'agendado' && new Date(t.inicio).getTime() > agora,
     )
     .map((t) => {
-      const chave = ehAdmin ? chaveAlerta.falta(t.id) : chaveAlerta.treinamento(t.id)
+      const chave = !ehAdmin
+        ? chaveAlerta.treinamento(t.id)
+        : t.presenca === 'faltou'
+          ? chaveAlerta.falta(t.id)
+          : chaveAlerta.comparecimento(t.id)
       return { t, chave, naoLido: !lido(chave) }
     })
 
@@ -238,7 +242,7 @@ export default function Alertas() {
             ['inativacoes', 'Inativações', naoLidos.inativacoes],
             ['cortar', `Cortar (${DIAS_CORTE}+ dias)`, naoLidos.cortar],
             ['pedidos', 'Meus pedidos', naoLidos.pedidos],
-            ['treinos', ehAdmin ? 'Faltas' : 'Treinos', naoLidos.treinos],
+            ['treinos', ehAdmin ? 'Presenças' : 'Treinos', naoLidos.treinos],
           ] as const
         ).map(([valor, rotulo, qtd]) => (
           <button
@@ -266,7 +270,7 @@ export default function Alertas() {
             ? `Motoristas ativos sem rota há ${DIAS_CORTE} dias ou mais: avalie o corte.`
             : aba === 'treinos'
               ? ehAdmin
-                ? 'Motoristas que faltaram ao treinamento: remarque com eles.'
+                ? 'Quem compareceu ou faltou ao treinamento. Se faltou, remarque com o motorista.'
                 : 'Treinamentos marcados nos seus galpões.'
               : 'Seus pedidos de inativação e reativação que já foram aprovados ou recusados.'}
       </p>
@@ -452,8 +456,21 @@ export default function Alertas() {
                   <ItemAlerta key={chave} naoLido={naoLido} aoMarcar={() => marcarComoLido([chave])}>
                     <Link to="/treinamentos" className="block">
                       <p className="font-semibold text-slate-900">{t.nome ?? 'Motorista'}</p>
-                      <p className={`mt-1 ${t.presenca === 'faltou' ? 'font-semibold text-rose-700' : 'text-sky-700'}`}>
-                        {t.presenca === 'faltou' ? 'Faltou ao treinamento' : 'Treinamento'} · {t.galpao} · {formatarDataHora(t.inicio)}
+                      <p
+                        className={`mt-1 ${
+                          t.presenca === 'faltou'
+                            ? 'font-semibold text-rose-700'
+                            : t.presenca === 'compareceu'
+                              ? 'font-semibold text-emerald-700'
+                              : 'text-sky-700'
+                        }`}
+                      >
+                        {t.presenca === 'faltou'
+                          ? 'Faltou ao treinamento'
+                          : t.presenca === 'compareceu'
+                            ? 'Compareceu ao treinamento'
+                            : 'Treinamento'}{' '}
+                        · {t.galpao} · {formatarDataHora(t.inicio)}
                       </p>
                       {t.presenca_obs && <p className="mt-1 text-sm text-slate-600">“{t.presenca_obs}”</p>}
                       {t.presenca_por_nome && <p className="mt-2 text-sm text-slate-500">Por {t.presenca_por_nome}</p>}

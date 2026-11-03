@@ -1762,9 +1762,120 @@ begin
     raise exception 'FALHOU: admin não corrigiu a presença';
   end if;
   raise notice 'OK: falta vira alerta do admin e o admin corrige a presença';
+
+  n := public.alertas_nao_lidos();
+  perform public.marcar_alertas_lidos(array['comp:' || v_id]);
+  if public.alertas_nao_lidos() <> n - 1 then raise exception 'FALHOU: comparecimento não virou alerta do admin'; end if;
+  raise notice 'OK: comparecimento vira alerta do admin';
+
+  begin
+    perform public.reservar_lembretes_treinamento();
+    raise exception 'FALHOU: usuário logado (admin) chamou reservar_lembretes_treinamento';
+  exception when insufficient_privilege then raise notice 'OK: usuário logado não reserva lembretes de treinamento';
+  end;
 end;
 $$;
 reset role;
+
+-- Lembrete 16 h antes: só na janela, só marcado com antecedência, uma vez por horário.
+insert into public.treinamentos (evento_id, galpao, inicio, criado_em) values
+  ('ev-lembrar',       'SRJ1', now() + interval '10 hours', now() - interval '2 days'),
+  ('ev-longe',         'SRJ1', now() + interval '20 hours', now() - interval '2 days'),
+  ('ev-em-cima-hora',  'SRJ1', now() + interval '10 hours', now() - interval '1 hour');
+do $$
+declare v_ids bigint[];
+begin
+  select array_agg(r.id) into v_ids from public.reservar_lembretes_treinamento() r;
+  if v_ids is distinct from array[(select id from public.treinamentos where evento_id = 'ev-lembrar')] then
+    raise exception 'FALHOU: lembrete reservou os treinamentos errados: %', v_ids;
+  end if;
+  if exists (select 1 from public.reservar_lembretes_treinamento()) then
+    raise exception 'FALHOU: lembrete de treinamento reservado duas vezes';
+  end if;
+  update public.treinamentos set inicio = inicio + interval '1 hour' where evento_id = 'ev-lembrar';
+  if (select count(*) from public.reservar_lembretes_treinamento()) <> 1 then
+    raise exception 'FALHOU: treinamento remarcado não ganhou novo lembrete';
+  end if;
+  delete from public.treinamentos where evento_id in ('ev-lembrar', 'ev-longe', 'ev-em-cima-hora');
+  raise notice 'OK: lembrete de treinamento sai 16 h antes, uma vez por horário';
+end;
+$$;
+
+-- Remarcar: dispatcher só no galpão dele; a agenda só vence quando o horário dela muda.
+-- Id lido antes de trocar de papel: a RLS esconde o SRJ1 do dispatcher SRJ2.
+select set_config('teste.id_futuro', (select id::text from public.treinamentos where evento_id = 'ev-futuro-srj1'), true);
+insert into public.treinamentos (evento_id, galpao, inicio, agenda_inicio, presenca, presenca_obs)
+values ('ev-faltou', 'SRJ1', now() - interval '1 hour', now() - interval '1 hour', 'faltou', 'Não apareceu');
+select set_config('request.jwt.claims', '{"sub":"00000000-0000-4000-a000-000000000003","role":"authenticated"}', true);
+set local role authenticated;
+do $$
+begin
+  perform public.remarcar_treinamento(current_setting('teste.id_futuro')::bigint, now() + interval '5 days');
+  raise exception 'FALHOU: dispatcher SRJ2 remarcou treinamento do SRJ1';
+exception when insufficient_privilege then raise notice 'OK: dispatcher não remarca treinamento de outro galpão';
+end;
+$$;
+reset role;
+select set_config('request.jwt.claims', '{"sub":"00000000-0000-4000-a000-000000000002","role":"authenticated"}', true);
+set local role authenticated;
+do $$
+declare v_id bigint := (select id from public.treinamentos where evento_id = 'ev-futuro-srj1');
+begin
+  begin
+    perform public.remarcar_treinamento(v_id, now() - interval '1 hour');
+    raise exception 'FALHOU: remarcou para o passado';
+  exception when invalid_parameter_value then null;
+  end;
+  begin
+    perform public.remarcar_treinamento(v_id, now() + interval '61 days');
+    raise exception 'FALHOU: remarcou para depois de 60 dias';
+  exception when invalid_parameter_value then null;
+  end;
+  begin
+    perform public.remarcar_treinamento((select id from public.treinamentos where evento_id = 'ev-passado-srj1'), now() + interval '1 day');
+    raise exception 'FALHOU: remarcou quem já compareceu';
+  exception when invalid_parameter_value then null;
+  end;
+  perform public.remarcar_treinamento(v_id, now() + interval '5 days');
+  if (select inicio from public.treinamentos where id = v_id) <> now() + interval '5 days'
+     or (select remarcado_por_nome from public.treinamentos where id = v_id) is distinct from 'Dispatcher SRJ1' then
+    raise exception 'FALHOU: remarcação não foi gravada';
+  end if;
+  perform public.remarcar_treinamento((select id from public.treinamentos where evento_id = 'ev-faltou'), now() + interval '2 days');
+  if (select presenca from public.treinamentos where evento_id = 'ev-faltou') is not null then
+    raise exception 'FALHOU: remarcar quem faltou não reabriu a presença';
+  end if;
+  raise notice 'OK: dispatcher remarca no galpão dele e quem faltou volta a ficar em aberto';
+end;
+$$;
+reset role;
+do $$
+declare v_id bigint := (select id from public.treinamentos where evento_id = 'ev-futuro-srj1'); v_agenda timestamptz; r jsonb;
+begin
+  select agenda_inicio into v_agenda from public.treinamentos where id = v_id;
+  -- Agenda igual: a remarcação do app fica.
+  r := public.sincronizar_treinamentos(jsonb_build_array(
+    jsonb_build_object('evento_id', 'ev-futuro-srj1', 'galpao', 'SRJ1', 'nome', 'Treino Ficticio Um', 'inicio', v_agenda)
+  ), v_agenda - interval '1 hour', v_agenda + interval '1 hour');
+  if (select inicio from public.treinamentos where id = v_id) <> now() + interval '5 days' then
+    raise exception 'FALHOU: sincronização desfez a remarcação do app: %', r;
+  end if;
+  -- Evento fora da janela lida: remarcado para dentro dela não é cancelado.
+  r := public.sincronizar_treinamentos('[]'::jsonb, now() + interval '4 days', now() + interval '6 days');
+  if (select status from public.treinamentos where id = v_id) <> 'agendado' then
+    raise exception 'FALHOU: treinamento remarcado foi cancelado: %', r;
+  end if;
+  -- Horário mudou na agenda: ela vence.
+  r := public.sincronizar_treinamentos(jsonb_build_array(
+    jsonb_build_object('evento_id', 'ev-futuro-srj1', 'galpao', 'SRJ1', 'nome', 'Treino Ficticio Um', 'inicio', now() + interval '4 days')
+  ), now() + interval '3 days', now() + interval '6 days');
+  if (select inicio from public.treinamentos where id = v_id) <> now() + interval '4 days'
+     or (select remarcado_de from public.treinamentos where id = v_id) is not null then
+    raise exception 'FALHOU: mudança na agenda não venceu a remarcação: %', r;
+  end if;
+  raise notice 'OK: agenda só muda o treinamento remarcado quando o horário dela muda';
+end;
+$$;
 
 -- ---------------------------------------------------------------------
 -- CRM direto: rotas por CPF (BASE - POWER BI) e disparo agendado.

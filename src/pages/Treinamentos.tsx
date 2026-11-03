@@ -3,9 +3,9 @@ import { useSearchParams } from 'react-router-dom'
 import { useAuth } from '../auth/AuthProvider'
 import { IconeTelefone } from '../components/Icones'
 import { useToast } from '../components/Toast'
-import { Botao, Carregando, EstadoErro, EstadoVazio, Modal, Pagina } from '../components/ui'
+import { Botao, Campo, Carregando, EstadoErro, EstadoVazio, Modal, Pagina } from '../components/ui'
 import { chaveAlerta, useAlertasLidos } from '../hooks/motoristas'
-import { DIAS_ANTES, DIAS_DEPOIS, useAgora, useMarcarPresenca, useTreinamentos } from '../hooks/treinamentos'
+import { DIAS_ANTES, DIAS_DEPOIS, useAgora, useMarcarPresenca, useRemarcarTreinamento, useTreinamentos } from '../hooks/treinamentos'
 import { GALPOES } from '../lib/constantes'
 import { formatarDataHora } from '../lib/datas'
 import { mensagemErro } from '../lib/erros'
@@ -56,7 +56,7 @@ function porDia(itens: Treinamento[]) {
 
 /**
  * Treinamentos marcados pelo admin (vêm das agendas dos galpões). O dispatcher
- * vê os dos galpões dele e, depois do horário, marca Compareceu ou Faltou.
+ * vê os dos galpões dele, remarca e, depois do horário, marca Compareceu ou Faltou.
  */
 export default function Treinamentos() {
   const { usuario, ehAdmin } = useAuth()
@@ -66,6 +66,7 @@ export default function Treinamentos() {
   const consulta = useTreinamentos()
   const lidos = useAlertasLidos()
   const [marcando, setMarcando] = useState<{ t: Treinamento; presenca: Presenca | null } | null>(null)
+  const [remarcando, setRemarcando] = useState<Treinamento | null>(null)
 
   function definir(chave: string, valor: string) {
     setParams(
@@ -145,6 +146,7 @@ export default function Treinamentos() {
                   t={t}
                   mostrarGalpao={mostrarGalpao}
                   mostrarDia
+                  aoRemarcar={() => setRemarcando(t)}
                   acao={
                     <div className="flex gap-2">
                       <button
@@ -175,7 +177,7 @@ export default function Treinamentos() {
               porDia(proximos).map((g) => (
                 <Grupo key={g.chave} titulo={g.rotulo} qtd={g.itens.length}>
                   {g.itens.map((t) => (
-                    <Linha key={t.id} t={t} mostrarGalpao={mostrarGalpao} novo={novo(t)} />
+                    <Linha key={t.id} t={t} mostrarGalpao={mostrarGalpao} novo={novo(t)} aoRemarcar={() => setRemarcando(t)} />
                   ))}
                 </Grupo>
               ))
@@ -196,6 +198,7 @@ export default function Treinamentos() {
                       mostrarGalpao={mostrarGalpao}
                       acao={<SeloPresenca presenca={t.presenca!} />}
                       aoTocar={ehAdmin ? () => setMarcando({ t, presenca: t.presenca }) : undefined}
+                      aoRemarcar={t.presenca === 'faltou' ? () => setRemarcando(t) : undefined}
                     >
                       {(t.presenca_obs || t.presenca_por_nome) && (
                         <p className="col-start-2 col-end-[-1] mt-1 text-[13px] text-slate-500">
@@ -238,6 +241,7 @@ export default function Treinamentos() {
       )}
 
       <ModalPresenca alvo={marcando} ehAdmin={ehAdmin} aoFechar={() => setMarcando(null)} />
+      <ModalRemarcar alvo={remarcando} aoFechar={() => setRemarcando(null)} />
     </Pagina>
   )
 }
@@ -281,6 +285,7 @@ function Linha({
   novo = false,
   acao,
   aoTocar,
+  aoRemarcar,
   children,
 }: {
   t: Treinamento
@@ -289,6 +294,7 @@ function Linha({
   novo?: boolean
   acao?: ReactNode
   aoTocar?: () => void
+  aoRemarcar?: () => void
   children?: ReactNode
 }) {
   const whatsapp = linkWhatsApp(t.telefone)
@@ -337,6 +343,21 @@ function Linha({
       ) : (
         <div className={grade}>{conteudo}</div>
       )}
+      {(aoRemarcar || t.remarcado_de) && (
+        <div className="-mt-2 flex flex-wrap items-center justify-between gap-x-3 pb-1 pl-[5.5rem] pr-4 text-[13px]">
+          {t.remarcado_de && (
+            <span className="text-amber-700">
+              Remarcado de {formatarDataHora(t.remarcado_de)}
+              {t.remarcado_por_nome ? ` · ${t.remarcado_por_nome}` : ''}
+            </span>
+          )}
+          {aoRemarcar && (
+            <button type="button" onClick={aoRemarcar} className="ml-auto min-h-11 px-1 font-semibold text-sky-700 active:opacity-60">
+              Remarcar
+            </button>
+          )}
+        </div>
+      )}
     </li>
   )
 }
@@ -346,6 +367,72 @@ function SeloPresenca({ presenca }: { presenca: Presenca }) {
     <span className="rounded-full bg-emerald-50 px-2.5 py-0.5 text-[13px] font-semibold text-emerald-700">Compareceu</span>
   ) : (
     <span className="rounded-full bg-rose-50 px-2.5 py-0.5 text-[13px] font-semibold text-rose-700">Faltou</span>
+  )
+}
+
+/** Nova data e horário, sempre no horário de Brasília (-03:00 fixo, sem horário de verão). */
+function ModalRemarcar({ alvo, aoFechar }: { alvo: Treinamento | null; aoFechar: () => void }) {
+  const remarcar = useRemarcarTreinamento()
+  const toast = useToast()
+  const [data, setData] = useState('')
+  const [horario, setHorario] = useState('')
+  const [alvoAnterior, setAlvoAnterior] = useState(alvo)
+
+  // Abriu para outro treinamento: recomeça com o horário dele e sem data.
+  if (alvo !== alvoAnterior) {
+    setAlvoAnterior(alvo)
+    setData('')
+    setHorario(alvo ? hora(alvo.inicio) : '')
+  }
+
+  const agora = useAgora()
+  const hoje = dia(new Date(agora).toISOString())
+  const limite = dia(new Date(agora + DIAS_DEPOIS * 864e5).toISOString())
+  const novoInicio = data && horario ? new Date(`${data}T${horario}:00-03:00`) : null
+  const noPassado = !!novoInicio && novoInicio.getTime() <= agora
+
+  function salvar() {
+    if (!alvo || !novoInicio) return
+    remarcar.mutate(
+      { id: alvo.id, inicio: novoInicio.toISOString() },
+      {
+        onSuccess: () => {
+          toast('Treinamento remarcado.', 'sucesso')
+          aoFechar()
+        },
+        onError: (e) => toast(mensagemErro(e), 'erro'),
+      },
+    )
+  }
+
+  return (
+    <Modal aberto={!!alvo} titulo="Remarcar treinamento" aoFechar={aoFechar}>
+      {alvo && (
+        <>
+          <p className="text-slate-700">
+            <strong>{alvo.nome ?? 'Motorista'}</strong> · {alvo.galpao} · {formatarDataHora(alvo.inicio)}
+          </p>
+          {alvo.presenca === 'faltou' && (
+            <p className="text-sm text-slate-500">A falta marcada será apagada, e a presença fica em aberto para a nova data.</p>
+          )}
+          <div className="grid grid-cols-2 gap-2">
+            <Campo rotulo="Nova data" type="date" min={hoje} max={limite} value={data} onChange={(e) => setData(e.target.value)} required />
+            <Campo
+              rotulo="Horário"
+              type="time"
+              value={horario}
+              onChange={(e) => setHorario(e.target.value)}
+              erro={noPassado ? 'Já passou.' : null}
+              required
+            />
+          </div>
+          <p className="text-sm text-slate-500">A Google Agenda não muda. Se precisar, ajuste o evento por lá.</p>
+          <Botao disabled={!novoInicio || noPassado} carregando={remarcar.isPending} onClick={salvar}>
+            Salvar nova data
+          </Botao>
+        </>
+      )}
+    </Modal>
   )
 }
 

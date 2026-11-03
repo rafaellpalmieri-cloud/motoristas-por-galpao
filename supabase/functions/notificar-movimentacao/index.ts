@@ -7,10 +7,11 @@
 //      • "pendente": push para os admins ativos;
 //      • "aprovada"/"recusada": push para quem pediu.
 //  { treinamento_id, evento } → "novo": push para os dispatchers do galpão;
-//                               "faltou": push para os admins ativos.
+//                               "faltou"/"compareceu": push para os admins ativos.
 //  { tarefa } → tarefas agendadas (pg_cron):
 //      • "lembrete_semanal": resumo para cada dispatcher (parados 30+ dias, nunca rodou);
-//      • "pedidos_parados": avisa os admins de pedidos sem resposta há mais de 24 h.
+//      • "pedidos_parados": avisa os admins de pedidos sem resposta há mais de 24 h;
+//      • "lembrete_treinamentos": avisa os dispatchers do galpão 16 h antes do treinamento.
 //
 // Autenticação: cabeçalho "x-webhook-token" igual ao secret NOTIFICAR_TOKEN.
 // Secrets: NOTIFICAR_TOKEN, VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY
@@ -108,6 +109,7 @@ Deno.serve(async (req) => {
 
   if (corpo?.tarefa === 'lembrete_semanal') return json(await lembreteSemanal(admin))
   if (corpo?.tarefa === 'pedidos_parados') return json(await pedidosParados(admin))
+  if (corpo?.tarefa === 'lembrete_treinamentos') return json(await lembreteTreinamentos(admin))
   if (corpo?.solicitacao_id) return await tratarPedido(admin, Number(corpo.solicitacao_id), String(corpo.status ?? ''))
   if (corpo?.historico_id) return await tratarMovimento(admin, Number(corpo.historico_id))
   if (corpo?.treinamento_id) return await tratarTreinamento(admin, Number(corpo.treinamento_id), String(corpo.evento ?? ''))
@@ -115,10 +117,10 @@ Deno.serve(async (req) => {
 })
 
 // ---------------------------------------------------------------------
-// Treinamento: "novo" → dispatchers do galpão; "faltou" → admins.
+// Treinamento: "novo" → dispatchers do galpão; "faltou"/"compareceu" → admins.
 // ---------------------------------------------------------------------
 async function tratarTreinamento(admin: SupabaseClient, id: number, evento: string): Promise<Response> {
-  if (!Number.isInteger(id) || id <= 0 || !['novo', 'faltou'].includes(evento)) {
+  if (!Number.isInteger(id) || id <= 0 || !['novo', 'faltou', 'compareceu'].includes(evento)) {
     return json({ erro: 'Treinamento inválido.' }, 400)
   }
   const { data: t } = await admin
@@ -141,10 +143,10 @@ async function tratarTreinamento(admin: SupabaseClient, id: number, evento: stri
       tag: `trein-${t.id}`,
     }
   } else {
-    if (t.presenca !== 'faltou') return json({ ok: true, pulado: 'presença mudou' })
+    if (t.presenca !== evento) return json({ ok: true, pulado: 'presença mudou' })
     usuarios = await adminsAtivos(admin)
     aviso = {
-      title: `❌ Faltou ao treinamento · ${t.galpao}`,
+      title: evento === 'faltou' ? `❌ Faltou ao treinamento · ${t.galpao}` : `✅ Compareceu ao treinamento · ${t.galpao}`,
       body: [
         `${nome} · ${dataHora(t.inicio as string)}`,
         t.presenca_obs ? `“${t.presenca_obs}”` : null,
@@ -153,7 +155,7 @@ async function tratarTreinamento(admin: SupabaseClient, id: number, evento: stri
         .filter(Boolean)
         .join('\n'),
       url: '/treinamentos',
-      tag: `falta-${t.id}`,
+      tag: `${evento === 'faltou' ? 'falta' : 'comp'}-${t.id}`,
     }
   }
   return json({ ok: true, push: await enviarPush(admin, usuarios, aviso) })
@@ -503,6 +505,25 @@ async function lembreteSemanal(admin: SupabaseClient) {
 }
 
 /** De hora em hora: pedidos pendentes há mais de 24 h (lembra a cada 24 h). */
+async function lembreteTreinamentos(admin: SupabaseClient) {
+  const { data: treinos, error } = await admin.rpc('reservar_lembretes_treinamento')
+  if (error) return { erro: error.message }
+
+  let enviados = 0
+  for (const t of (treinos ?? []) as { id: number; galpao: string; nome: string | null; inicio: string }[]) {
+    const usuarios = (await dispatchersDoGalpao(admin, t.galpao, null)).map((d) => d.user_id)
+    await enviarPush(admin, usuarios, {
+      title: `⏰ Lembrete de treinamento · ${t.galpao}`,
+      body: `${t.nome ?? 'Motorista'}
+${dataHora(t.inicio)}`,
+      url: '/treinamentos',
+      tag: `lembrete-${t.id}`,
+    })
+    enviados++
+  }
+  return { ok: true, treinamentos: enviados }
+}
+
 async function pedidosParados(admin: SupabaseClient) {
   const corte = new Date(Date.now() - 24 * 3600 * 1000).toISOString()
   const { data: atrasados, error } = await admin
