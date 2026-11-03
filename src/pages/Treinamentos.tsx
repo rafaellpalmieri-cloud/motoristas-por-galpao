@@ -146,9 +146,11 @@ export default function Treinamentos() {
                   t={t}
                   mostrarGalpao={mostrarGalpao}
                   mostrarDia
+                  nomeInteiro
                   aoRemarcar={() => setRemarcando(t)}
                   acao={
                     <div className="flex gap-2">
+                      <BotaoWhatsApp t={t} />
                       <button
                         type="button"
                         onClick={() => setMarcando({ t, presenca: 'compareceu' })}
@@ -278,11 +280,29 @@ function Grupo({
   )
 }
 
+function BotaoWhatsApp({ t }: { t: Treinamento }) {
+  const whatsapp = linkWhatsApp(t.telefone)
+  if (!whatsapp) return null
+  return (
+    <a
+      href={whatsapp}
+      target="_blank"
+      rel="noopener noreferrer"
+      onClick={(e) => e.stopPropagation()}
+      aria-label={`WhatsApp de ${t.nome ?? 'motorista'}`}
+      className="flex h-10 w-10 items-center justify-center rounded-full bg-emerald-50 text-emerald-700 active:opacity-60"
+    >
+      <IconeTelefone className="h-5 w-5" />
+    </a>
+  )
+}
+
 function Linha({
   t,
   mostrarGalpao,
   mostrarDia = false,
   novo = false,
+  nomeInteiro = false,
   acao,
   aoTocar,
   aoRemarcar,
@@ -292,12 +312,13 @@ function Linha({
   mostrarGalpao: boolean
   mostrarDia?: boolean
   novo?: boolean
+  /** Com mais botões na linha sobra pouco espaço: o texto quebra em vez de cortar. */
+  nomeInteiro?: boolean
   acao?: ReactNode
   aoTocar?: () => void
   aoRemarcar?: () => void
   children?: ReactNode
 }) {
-  const whatsapp = linkWhatsApp(t.telefone)
   const conteudo = (
     <>
       <div className="flex flex-col items-start">
@@ -306,29 +327,17 @@ function Linha({
       </div>
       <div className="min-w-0">
         <p className="flex items-center gap-1.5">
-          <span className="truncate text-[17px] text-slate-900">{t.nome ?? 'Motorista'}</span>
+          <span className={`${nomeInteiro ? 'break-words' : 'truncate'} min-w-0 text-[17px] text-slate-900`}>{t.nome ?? 'Motorista'}</span>
           {novo && <span className="h-2 w-2 shrink-0 animate-surgir rounded-full bg-sky-600" aria-label="Novo" />}
         </p>
-        <p className="truncate text-[13px] text-slate-500">
+        <p className={`${nomeInteiro ? '' : 'truncate'} text-[13px] text-slate-500`}>
           {mostrarGalpao && <span className="font-semibold text-sky-700">{t.galpao}</span>}
           {mostrarGalpao && t.telefone ? ' · ' : ''}
           {t.telefone ? formatarCelular(t.telefone) : !mostrarGalpao ? 'Sem telefone' : ''}
         </p>
       </div>
       <div className="flex items-center">
-        {acao ??
-          (whatsapp && (
-            <a
-              href={whatsapp}
-              target="_blank"
-              rel="noopener noreferrer"
-              onClick={(e) => e.stopPropagation()}
-              aria-label={`WhatsApp de ${t.nome ?? 'motorista'}`}
-              className="flex h-10 w-10 items-center justify-center rounded-full bg-emerald-50 text-emerald-700 active:opacity-60"
-            >
-              <IconeTelefone className="h-5 w-5" />
-            </a>
-          ))}
+        {acao ?? <BotaoWhatsApp t={t} />}
       </div>
       {children}
     </>
