@@ -191,10 +191,10 @@ export default function Motoristas() {
         <div role="group" aria-label="Filtrar por status" className="segmentado grid grid-cols-4 rounded-[9px] p-0.5">
             {(
               [
-                ['todos', 'Todos'],
                 ['ativo', 'Ativos'],
                 ['inativo', 'Inativos'],
                 ['pausado', 'Pausados'],
+                ['todos', 'Todos'],
               ] as const
             ).map(([valor, rotulo]) => (
               <button
