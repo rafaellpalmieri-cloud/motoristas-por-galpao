@@ -5,7 +5,7 @@ import { IconeTelefone } from '../components/Icones'
 import { useToast } from '../components/Toast'
 import { Botao, Campo, Carregando, EstadoErro, EstadoVazio, Modal, Pagina } from '../components/ui'
 import { chaveAlerta, useAlertasLidos } from '../hooks/motoristas'
-import { DIAS_ANTES, DIAS_DEPOIS, useAgora, useMarcarPresenca, useRemarcarTreinamento, useTreinamentos } from '../hooks/treinamentos'
+import { DIAS_ANTES, DIAS_DEPOIS, PRESENCA_DESDE, useAgora, useMarcarPresenca, useRemarcarTreinamento, useTreinamentos } from '../hooks/treinamentos'
 import { GALPOES } from '../lib/constantes'
 import { formatarDataHora } from '../lib/datas'
 import { mensagemErro } from '../lib/erros'
@@ -84,7 +84,10 @@ export default function Treinamentos() {
   const agora = useAgora()
   const todos = (consulta.data ?? []).filter((t) => !galpao || t.galpao === galpao)
   const ativos = todos.filter((t) => t.status === 'agendado')
-  const aguardando = ativos.filter((t) => !t.presenca && new Date(t.inicio).getTime() <= agora)
+  const aguardando = ativos.filter((t) => {
+    const inicio = new Date(t.inicio).getTime()
+    return !t.presenca && inicio >= PRESENCA_DESDE && inicio <= agora
+  })
   const proximos = ativos.filter((t) => new Date(t.inicio).getTime() > agora)
   const realizados = ativos.filter((t) => t.presenca).reverse()
   const cancelados = todos.filter((t) => t.status === 'cancelado')

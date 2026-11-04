@@ -11,6 +11,9 @@ const CAMPOS =
 export const DIAS_ANTES = 7
 export const DIAS_DEPOIS = 60
 
+/** Início do uso pelos dispatchers: treinamento anterior a isto não pede presença. */
+export const PRESENCA_DESDE = new Date('2026-11-05T00:00:00-03:00').getTime()
+
 // A RLS já limita aos galpões do usuário.
 export function useTreinamentos() {
   const { session } = useAuth()
