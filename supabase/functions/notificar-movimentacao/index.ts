@@ -11,7 +11,8 @@
 //  { tarefa } → tarefas agendadas (pg_cron):
 //      • "lembrete_semanal": resumo para cada dispatcher (parados 30+ dias, nunca rodou);
 //      • "pedidos_parados": avisa os admins de pedidos sem resposta há mais de 24 h;
-//      • "lembrete_treinamentos": avisa os dispatchers do galpão 16 h antes do treinamento.
+//      • "lembrete_treinamentos": avisa os dispatchers do galpão 16 h antes do treinamento;
+//      • "presencas_pendentes": 16:00, avisa os dispatchers do galpão com presença por marcar.
 //
 // Autenticação: cabeçalho "x-webhook-token" igual ao secret NOTIFICAR_TOKEN.
 // Secrets: NOTIFICAR_TOKEN, VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY
@@ -110,6 +111,7 @@ Deno.serve(async (req) => {
   if (corpo?.tarefa === 'lembrete_semanal') return json(await lembreteSemanal(admin))
   if (corpo?.tarefa === 'pedidos_parados') return json(await pedidosParados(admin))
   if (corpo?.tarefa === 'lembrete_treinamentos') return json(await lembreteTreinamentos(admin))
+  if (corpo?.tarefa === 'presencas_pendentes') return json(await presencasPendentes(admin))
   if (corpo?.solicitacao_id) return await tratarPedido(admin, Number(corpo.solicitacao_id), String(corpo.status ?? ''))
   if (corpo?.historico_id) return await tratarMovimento(admin, Number(corpo.historico_id))
   if (corpo?.treinamento_id) return await tratarTreinamento(admin, Number(corpo.treinamento_id), String(corpo.evento ?? ''))
@@ -522,6 +524,44 @@ ${dataHora(t.inicio)}`,
     enviados++
   }
   return { ok: true, treinamentos: enviados }
+}
+
+// Igual ao app: só treinamentos desde o início do uso (PRESENCA_DESDE) e dos
+// últimos 7 dias, que é o que a aba Treinos mostra.
+const PRESENCA_DESDE = '2026-11-05T00:00:00-03:00'
+
+/** 16:00: dispatchers do galpão com treinamento já passado e presença por marcar. */
+async function presencasPendentes(admin: SupabaseClient) {
+  const seteDias = new Date(Date.now() - 7 * 86_400_000).toISOString()
+  const desde = new Date(Math.max(Date.parse(PRESENCA_DESDE), Date.parse(seteDias))).toISOString()
+  const { data, error } = await admin
+    .from('treinamentos')
+    .select('galpao, nome, inicio')
+    .eq('status', 'agendado')
+    .is('presenca', null)
+    .gte('inicio', desde)
+    .lte('inicio', new Date().toISOString())
+    .order('inicio')
+  if (error) return { erro: error.message }
+
+  const porGalpao = new Map<string, { nome: string | null; inicio: string }[]>()
+  for (const t of data ?? []) porGalpao.set(t.galpao as string, [...(porGalpao.get(t.galpao as string) ?? []), t as { nome: string | null; inicio: string }])
+
+  let avisados = 0
+  for (const [galpao, treinos] of porGalpao) {
+    const usuarios = (await dispatchersDoGalpao(admin, galpao, null)).map((d) => d.user_id)
+    if (!usuarios.length) continue
+    const nomes = treinos.slice(0, 3).map((t) => `${t.nome ?? 'Motorista'} · ${dataHora(t.inicio)}`)
+    if (treinos.length > 3) nomes.push(`e mais ${treinos.length - 3}`)
+    await enviarPush(admin, usuarios, {
+      title: `📋 Presença por marcar · ${galpao}`,
+      body: [...nomes, 'Toque para marcar quem compareceu ou faltou.'].join('\n'),
+      url: '/treinamentos',
+      tag: `presencas-${galpao}`,
+    })
+    avisados++
+  }
+  return { ok: true, galpoes: porGalpao.size, avisados }
 }
 
 async function pedidosParados(admin: SupabaseClient) {
