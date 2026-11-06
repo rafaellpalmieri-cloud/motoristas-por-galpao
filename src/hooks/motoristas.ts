@@ -194,7 +194,7 @@ export interface FiltrosAlertas {
   galpao: string // '' = todos; SEM_GALPAO = sem galpão
 }
 
-/** Inativações no período e galpão escolhidos (a RLS já limita aos galpões do usuário). */
+/** Mudanças de status (ativação, reativação, inativação) no período e galpão escolhidos (a RLS já limita aos galpões do usuário). */
 export function useAlertas({ de, ate, galpao }: FiltrosAlertas) {
   return useQuery({
     queryKey: ['alertas', 'lista', de, ate, galpao],
@@ -204,7 +204,6 @@ export function useAlertas({ de, ate, galpao }: FiltrosAlertas) {
       let consulta = supabase
         .from('motorista_historico')
         .select('*, motoristas(nome_completo, placa, codigo)')
-        .eq('status_novo', 'inativo')
         .gte('alterado_em', `${de}T00:00:00-03:00`)
         .lte('alterado_em', `${ate}T23:59:59.999-03:00`)
       if (galpao === SEM_GALPAO) consulta = consulta.is('galpao', null)

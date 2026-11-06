@@ -43,6 +43,12 @@ const ATALHOS = [
 
 type Aba = 'inativacoes' | 'cortar' | 'pedidos' | 'treinos'
 
+/** Inativado, reativado ou ativado (cadastro novo: sem status anterior). */
+function tipoMovimento(a: { status_anterior: string | null; status_novo: string }) {
+  if (a.status_novo === 'inativo') return 'Inativado'
+  return a.status_anterior ? 'Reativado' : 'Ativado · cadastro novo'
+}
+
 
 /**
  * Alertas dos galpões do usuário. Um alerta continua "não lido" até a pessoa
@@ -170,6 +176,7 @@ export default function Alertas() {
       aba === 'inativacoes'
         ? inativacoesVisiveis.map(({ a, naoLido }) => ({
             data: formatarDataHora(a.alterado_em),
+            tipo: tipoMovimento(a),
             nome: a.motoristas?.nome_completo ?? '',
             placa: a.motoristas?.placa ?? '',
             codigo: a.motoristas?.codigo ?? '',
@@ -239,7 +246,7 @@ export default function Alertas() {
       <div className="-mx-4 mb-3 flex gap-2 overflow-x-auto px-4 pb-1 [scrollbar-width:none]" role="tablist">
         {(
           [
-            ['inativacoes', 'Inativações', naoLidos.inativacoes],
+            ['inativacoes', 'Ativações e inativações', naoLidos.inativacoes],
             ['cortar', `Cortar (${DIAS_CORTE}+ dias)`, naoLidos.cortar],
             ['pedidos', 'Meus pedidos', naoLidos.pedidos],
             ['treinos', ehAdmin ? 'Presenças' : 'Treinos', naoLidos.treinos],
@@ -265,7 +272,7 @@ export default function Alertas() {
 
       <p className="mb-3 text-slate-600">
         {aba === 'inativacoes'
-          ? 'Motoristas inativados no app ou na planilha interna.'
+          ? 'Motoristas ativados, reativados ou inativados no app ou no CRM.'
           : aba === 'cortar'
             ? `Motoristas ativos sem rota há ${DIAS_CORTE} dias ou mais: avalie o corte.`
             : aba === 'treinos'
@@ -419,8 +426,9 @@ export default function Alertas() {
                         </p>
                         {a.origem === 'planilha' && <SeloPlanilha />}
                       </div>
-                      <p className="mt-1 text-rose-700">
-                        Inativado{a.motivo ? ` · ${a.motivo}` : ''}
+                      <p className={`mt-1 ${a.status_novo === 'inativo' ? 'text-rose-700' : 'text-emerald-700'}`}>
+                        {tipoMovimento(a)}
+                        {a.status_novo === 'inativo' && a.motivo ? ` · ${a.motivo}` : ''}
                         {a.galpao ? ` · ${a.galpao}` : ''}
                       </p>
                       {a.observacao && <p className="mt-1 text-sm text-slate-600">“{a.observacao}”</p>}

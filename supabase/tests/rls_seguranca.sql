@@ -1970,6 +1970,57 @@ begin
 end;
 $$;
 
+-- Cadastro novo ativo do CRM vira histórico (ativação); pausado novo, não.
+reset role;
+set local role service_role;
+do $$
+declare v_id bigint;
+begin
+  perform public.sincronizar_base_crm('[
+    {"crm_id":"70000000-0000-4000-a000-000000000011","status":"ativo","nome_completo":"Ativacao Ficticia","galpao":"SRJ1"},
+    {"crm_id":"70000000-0000-4000-a000-000000000012","status":"pausado","nome_completo":"Pausado Ficticio","galpao":"SRJ1"}
+  ]'::jsonb);
+  select h.id into v_id from public.motorista_historico h join public.motoristas m on m.id = h.motorista_id
+   where m.crm_id = '70000000-0000-4000-a000-000000000011'
+     and h.status_anterior is null and h.status_novo = 'ativo' and h.origem = 'planilha';
+  if v_id is null then
+    raise exception 'FALHOU: cadastro novo ativo do CRM não gerou histórico de ativação';
+  end if;
+  if exists (select 1 from public.motorista_historico h join public.motoristas m on m.id = h.motorista_id
+              where m.crm_id = '70000000-0000-4000-a000-000000000012') then
+    raise exception 'FALHOU: cadastro novo pausado gerou histórico';
+  end if;
+  perform set_config('teste.mov_ativacao', v_id::text, true);
+  raise notice 'OK: cadastro novo ativo do CRM gera histórico de ativação; pausado não';
+end;
+$$;
+reset role;
+
+-- Ativação entra no sino e no relatório à parte, sem contar como reativação.
+select set_config('request.jwt.claims', '{"sub":"00000000-0000-4000-a000-000000000001","role":"authenticated"}', true);
+set local role authenticated;
+do $$
+declare v_antes int; v_depois int; r jsonb;
+begin
+  v_antes := public.alertas_nao_lidos();
+  perform public.marcar_alertas_lidos(array['mov:' || current_setting('teste.mov_ativacao')]);
+  v_depois := public.alertas_nao_lidos();
+  if v_antes - v_depois <> 1 then
+    raise exception 'FALHOU: ativação não contou no sino (% → %)', v_antes, v_depois;
+  end if;
+  r := public.relatorio_mensal(current_date);
+  if (r -> 'totais' ->> 'ativacoes')::int < 1 then
+    raise exception 'FALHOU: relatório não contou a ativação: %', r -> 'totais';
+  end if;
+  if exists (select 1 from public.motorista_historico h
+              where h.id = current_setting('teste.mov_ativacao')::bigint and h.status_anterior is not null) then
+    raise exception 'FALHOU: ativação gravada como reativação';
+  end if;
+  raise notice 'OK: ativação conta no sino e no relatório como ativação';
+end;
+$$;
+reset role;
+
 do $$ begin raise notice '=== TODOS OS TESTES PASSARAM ==='; end $$;
 
 rollback;

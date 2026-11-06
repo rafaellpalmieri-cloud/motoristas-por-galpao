@@ -1,6 +1,6 @@
 // Chamada pelos gatilhos do banco (pg_net):
-//  { historico_id }  → inativação/reativação:
-//      • notificação push para os dispatchers ativos do galpão (menos quem fez);
+//  { historico_id }  → inativação, reativação ou ativação (cadastro novo do CRM):
+//      • notificação push para os dispatchers ativos do galpão e para os admins ativos (menos quem fez);
 //      • WhatsApp (Z-API), só se configurado;
 //      • mudanças feitas NO APP: linha na aba "MOVIMENTAÇÕES APP" (se configurado).
 //  { solicitacao_id, status } → pedido de inativação ou reativação:
@@ -184,13 +184,17 @@ async function tratarMovimento(admin: SupabaseClient, historicoId: number): Prom
   if (!mov) return json({ erro: 'Movimentação não encontrada.' }, 404)
 
   const destinatarios = await dispatchersDoGalpao(admin, mov.galpao, mov.alterado_por)
+  // Admins recebem toda mudança de status, de todos os galpões (menos quem fez).
+  const admins = (await adminsAtivos(admin)).filter((id) => id !== mov.alterado_por)
+  const usuarios = [...new Set([...destinatarios.map((d) => d.user_id), ...admins])]
   const inativo = mov.status_novo === 'inativo'
+  const tipo = inativo ? '🚫 Inativado' : mov.status_anterior ? '✅ Reativado' : '🆕 Ativado (cadastro novo)'
   const aviso: Aviso = {
-    title: inativo ? `🚫 Inativado · ${mov.galpao ?? 'sem galpão'}` : `✅ Reativado · ${mov.galpao ?? 'sem galpão'}`,
+    title: `${tipo} · ${mov.galpao ?? 'sem galpão'}`,
     body: [
       nomeMotorista(mov.motoristas),
       inativo && mov.motivo ? `Motivo: ${mov.motivo}` : null,
-      `Por ${mov.origem === 'planilha' ? 'planilha interna' : (mov.alterado_por_nome ?? 'usuário do app')} · ${dataHora(mov.alterado_em)}`,
+      `Por ${mov.alterado_por_nome ?? (mov.origem === 'planilha' ? 'planilha interna' : 'usuário do app')} · ${dataHora(mov.alterado_em)}`,
     ]
       .filter(Boolean)
       .join('\n'),
@@ -198,7 +202,7 @@ async function tratarMovimento(admin: SupabaseClient, historicoId: number): Prom
     tag: `mov-${mov.id}`,
   }
 
-  const push = await enviarPush(admin, destinatarios.map((d) => d.user_id), aviso)
+  const push = await enviarPush(admin, usuarios, aviso)
   const whatsapp = await enviarWhatsApp(destinatarios.map((d) => d.telefone), `*${aviso.title}*\n${aviso.body}\n\n${SITE}`)
   const planilha = mov.origem === 'app' ? await registrarNaPlanilha(mov) : { pulado: 'mudança veio da planilha' }
 
